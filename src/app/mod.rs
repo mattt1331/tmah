@@ -3,8 +3,8 @@
 mod board;
 mod ui;
 
-use board::DcaAssignable;
 use crate::dB;
+use board::DcaAssignable;
 
 /// Top level of program state
 pub struct State {
@@ -52,7 +52,16 @@ impl Default for Cue {
     fn default() -> Self {
         Cue {
             name: "def cue name".to_string(),
-            dcas: vec![DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default()],
+            dcas: vec![
+                DcaState::default(),
+                DcaState::default(),
+                DcaState::default(),
+                DcaState::default(),
+                DcaState::default(),
+                DcaState::default(),
+                DcaState::default(),
+                DcaState::default(),
+            ],
         }
     }
 }

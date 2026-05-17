@@ -1,8 +1,8 @@
 //! Contains all the UI
 
-use eframe::egui::{self, ScrollArea};
-use egui_extras::{TableBuilder, Column};
 use super::{State, UiScreen};
+use eframe::egui::{self, ScrollArea};
+use egui_extras::{Column, TableBuilder};
 
 impl eframe::App for State {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -28,7 +28,7 @@ impl eframe::App for State {
                 }
             }
         });
-   }
+    }
 }
 
 /// UI
@@ -44,17 +44,25 @@ impl State {
                 .column(Column::auto())
                 .columns(Column::auto(), self.num_dcas.into())
                 .header(HEADER_HEIGHT, |mut header| {
-                    header.col(|ui| { ui.heading("Cue"); });
+                    header.col(|ui| {
+                        ui.heading("Cue");
+                    });
                     for i in 0..self.num_dcas {
-                        header.col(|ui| { ui.heading(format!("DCA {}", i+1)); });
+                        header.col(|ui| {
+                            ui.heading(format!("DCA {}", i + 1));
+                        });
                     }
                 })
                 .body(|mut body| {
                     for cue in &self.cues {
                         body.row(ROW_HEIGHT, |mut row| {
-                            row.col(|ui| { ui.label(cue.name.clone()); });
+                            row.col(|ui| {
+                                ui.label(cue.name.clone());
+                            });
                             for dca in &cue.dcas {
-                                row.col(|ui| { ui.label(dca.name()); });
+                                row.col(|ui| {
+                                    ui.label(dca.name());
+                                });
                             }
                         })
                     }
