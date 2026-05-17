@@ -1,40 +1,36 @@
 //! Contains the program state and UI
 
 mod board;
+mod ui;
 
 use board::DcaAssignable;
 use crate::dB;
-use eframe::egui;
 
 /// Top level of program state
-#[derive(Default)]
 pub struct State {
     // Actual program state
+    num_dcas: u8,
     cues: Vec<Cue>,
 
     // UI state etc
     ui_screen: UiScreen,
 }
 
+impl Default for State {
+    fn default() -> Self {
+        State {
+            num_dcas: 100,
+            cues: vec![Cue::default(), Cue::default(), Cue::default()],
+
+            ui_screen: UiScreen::default(),
+        }
+    }
+}
+
 impl State {
     pub fn new(_cc: &eframe::CreationContext) -> Self {
         Self::default()
     }
-}
-
-impl eframe::App for State {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
-            // Create the top menu bar and draw its buttons
-            ui.horizontal(|ui| {
-                ui.heading("miq-v2");
-                ui.selectable_value(&mut self.ui_screen, UiScreen::Cues, "Cues");
-                ui.selectable_value(&mut self.ui_screen, UiScreen::File, "File");
-                ui.selectable_value(&mut self.ui_screen, UiScreen::Board, "Board");
-            });
-            ui.heading("Goodbye, World.");
-        });
-   }
 }
 
 /// The different screens of the ui, like the cues, board connection, etc
@@ -48,11 +44,36 @@ enum UiScreen {
 
 /// One singular cue aka scene
 struct Cue {
+    name: String,
     dcas: Vec<DcaState>,
+}
+
+impl Default for Cue {
+    fn default() -> Self {
+        Cue {
+            name: "def cue name".to_string(),
+            dcas: vec![DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default(), DcaState::default()],
+        }
+    }
 }
 
 /// The state of a DCA, which can be realized by calling a cue
 struct DcaState {
     assigned: Vec<Box<dyn DcaAssignable>>,
     level: Option<dB>,
+}
+
+impl Default for DcaState {
+    fn default() -> Self {
+        DcaState {
+            assigned: Vec::new(),
+            level: None,
+        }
+    }
+}
+
+impl DcaState {
+    fn name(&self) -> String {
+        "DCA names not impl".to_string()
+    }
 }
