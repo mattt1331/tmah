@@ -35,31 +35,30 @@ impl eframe::App for State {
 impl State {
     /// Draw the UI of the area that shows the cues and DCAs
     fn cues_ui(&mut self, ui: &mut egui::Ui) {
-        // FIXME: don't access struct members, use getters
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 20.0;
         ScrollArea::both().auto_shrink(false).show(ui, |ui| {
             TableBuilder::new(ui)
                 // All columns must be "pre-allocated"
                 .column(Column::auto())
-                .columns(Column::auto(), self.num_dcas.into())
+                .columns(Column::auto(), self.num_dcas().into())
                 .header(HEADER_HEIGHT, |mut header| {
                     header.col(|ui| {
                         ui.heading("Cue");
                     });
-                    for i in 0..self.num_dcas {
+                    for i in 0..self.num_dcas() {
                         header.col(|ui| {
                             ui.heading(format!("DCA {}", i + 1));
                         });
                     }
                 })
                 .body(|mut body| {
-                    for cue in &self.cues {
+                    for cue in self.cues() {
                         body.row(ROW_HEIGHT, |mut row| {
                             row.col(|ui| {
-                                ui.label(cue.name.clone());
+                                ui.label(cue.name());
                             });
-                            for dca in &cue.dcas {
+                            for dca in cue.dcas() {
                                 row.col(|ui| {
                                     ui.label(dca.name());
                                 });

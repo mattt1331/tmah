@@ -18,6 +18,9 @@
           rustfmt
           clippy
 
+          # Needed to point whatever this is at alsa-lib
+          pkg-config
+
           # GUI libraries
           libxkbcommon
           libGL
@@ -25,6 +28,9 @@
 
           # Wayland libraries
           wayland
+
+          # MIDI libraries
+          alsa-lib
 				];
 
         LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}";

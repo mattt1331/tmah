@@ -4,13 +4,14 @@ mod board;
 mod ui;
 
 use crate::dB;
-use board::DcaAssignable;
+use board::{Connectable, DcaAssignable};
 
 /// Top level of program state
 pub struct State {
     // Actual program state
     num_dcas: u8,
     cues: Vec<Cue>,
+    connection: Box<dyn board::Connectable>,
 
     // UI state etc
     ui_screen: UiScreen,
@@ -21,6 +22,7 @@ impl Default for State {
         State {
             num_dcas: 100,
             cues: vec![Cue::default(), Cue::default(), Cue::default()],
+            connection: Box::new(board::NoConnection::new()),
 
             ui_screen: UiScreen::default(),
         }
@@ -30,6 +32,12 @@ impl Default for State {
 impl State {
     pub fn new(_cc: &eframe::CreationContext) -> Self {
         Self::default()
+    }
+    pub fn num_dcas(&self) -> u8 {
+        self.num_dcas
+    }
+    pub fn cues(&self) -> &Vec<Cue> {
+        &self.cues
     }
 }
 
@@ -63,6 +71,15 @@ impl Default for Cue {
                 DcaState::default(),
             ],
         }
+    }
+}
+
+impl Cue {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn dcas(&self) -> &Vec<DcaState> {
+        &self.dcas
     }
 }
 
