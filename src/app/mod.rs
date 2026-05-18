@@ -4,7 +4,7 @@ mod board;
 mod ui;
 
 use crate::dB;
-use board::{Connectable, DcaAssignable};
+use board::{Channel, Connectable};
 
 /// Top level of program state
 pub struct State {
@@ -51,6 +51,7 @@ enum UiScreen {
 }
 
 /// One singular cue aka scene
+#[derive(Clone)]
 struct Cue {
     name: String,
     dcas: Vec<DcaState>,
@@ -81,11 +82,19 @@ impl Cue {
     fn dcas(&self) -> &Vec<DcaState> {
         &self.dcas
     }
+    /// Takes this cue and has the provided `top` cue override any parameters that `top` sets.
+    /// Currently this just returns `top` but when EQs and crap get added this will make much more
+    /// sense as Cue is currently used to record the state of the board (M7CL). This could also be
+    /// terrible but idk
+    fn superimpose(&self, top: &Cue) -> Cue {
+        top.clone()
+    }
 }
 
 /// The state of a DCA, which can be realized by calling a cue
+#[derive(Clone)]
 struct DcaState {
-    assigned: Vec<Box<dyn DcaAssignable>>,
+    assigned: Vec<Channel>,
     level: Option<dB>,
 }
 
@@ -101,5 +110,8 @@ impl Default for DcaState {
 impl DcaState {
     fn name(&self) -> String {
         "DCA names not impl".to_string()
+    }
+    fn assigned(&self) -> &Vec<Channel> {
+        &self.assigned
     }
 }
