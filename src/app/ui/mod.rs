@@ -1,5 +1,6 @@
 //! Contains all the UI
 
+use super::board;
 use super::{State, UiScreen};
 use eframe::egui::{self, ScrollArea};
 use egui_extras::{Column, TableBuilder};
@@ -24,7 +25,24 @@ impl eframe::App for State {
                     ui.heading("File");
                 }
                 UiScreen::Board => {
-                    ui.heading("Board");
+                    // Dropdown box to select connection
+                    egui::ComboBox::from_label("Select connection type")
+                        .selected_text(format!("{:?}", self.connection_ui))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.connection_ui, board::Connections::None, "None");
+                            ui.selectable_value(&mut self.connection_ui, board::Connections::M7CLMidi, "M7CL over MIDI");
+                        });
+                    // Button to activate selected connection
+                    if self.connection_ui != self.connection_ui_prev {
+                        let response = ui.button(format!("Activate selected connection"));
+                        if response.clicked() {
+                            self.connection_ui_prev = self.connection_ui.clone();
+                            self.connection = self.connection_ui.clone().construct();
+                        }
+                    }
+                    ui.add_space(10.0);
+                    // Ui specific to the connection
+                    self.connection.ui(ui);
                 }
             }
         });
@@ -38,15 +56,15 @@ impl State {
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 20.0;
         ScrollArea::both().auto_shrink(false).show(ui, |ui| {
+            let num_dcas = self.num_dcas();
             TableBuilder::new(ui)
                 // All columns must be "pre-allocated"
-                .column(Column::auto())
-                .columns(Column::auto(), self.num_dcas().into())
+                .columns(Column::auto(), (num_dcas + 1).into())
                 .header(HEADER_HEIGHT, |mut header| {
                     header.col(|ui| {
                         ui.heading("Cue");
                     });
-                    for i in 0..self.num_dcas() {
+                    for i in 0..num_dcas {
                         header.col(|ui| {
                             ui.heading(format!("DCA {}", i + 1));
                         });
@@ -58,7 +76,7 @@ impl State {
                             row.col(|ui| {
                                 ui.label(cue.name());
                             });
-                            for dca in cue.dcas() {
+                            for dca in cue.dcas().iter().take(num_dcas.into()) {
                                 row.col(|ui| {
                                     ui.label(dca.name());
                                 });

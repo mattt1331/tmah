@@ -9,22 +9,26 @@ use board::{Channel, Connectable};
 /// Top level of program state
 pub struct State {
     // Actual program state
-    num_dcas: u8,
     cues: Vec<Cue>,
     connection: Box<dyn board::Connectable>,
 
     // UI state etc
     ui_screen: UiScreen,
+    /// The connection selected in the dropdown on the board screen
+    connection_ui: board::Connections,
+    /// The currently active connection to difference with above
+    connection_ui_prev: board::Connections,
 }
 
 impl Default for State {
     fn default() -> Self {
         State {
-            num_dcas: 100,
             cues: vec![Cue::default(), Cue::default(), Cue::default()],
             connection: Box::new(board::NoConnection::new()),
 
             ui_screen: UiScreen::default(),
+            connection_ui: board::Connections::default(),
+            connection_ui_prev: board::Connections::default(),
         }
     }
 }
@@ -34,10 +38,13 @@ impl State {
         Self::default()
     }
     pub fn num_dcas(&self) -> u8 {
-        self.num_dcas
+        self.connection.num_dcas()
     }
     pub fn cues(&self) -> &Vec<Cue> {
         &self.cues
+    }
+    pub fn connection(&self) -> &Box<dyn board::Connectable> {
+        &self.connection
     }
 }
 

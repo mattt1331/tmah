@@ -64,6 +64,9 @@ impl super::Connectable for M7CLMidi {
     fn num_channels(&self) -> u8 {
         self.num_channels_controlled
     }
+    fn num_dcas(&self) -> u8 {
+        8
+    }
     fn fire_cue(&mut self, cue: &Cue) {
         if self.no_touchy && matches!(self.board_state, Some(_)) {
             // no touchy assumes nothing else but this touches the board

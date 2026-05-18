@@ -11,20 +11,25 @@ pub trait Connectable {
 
     /// The number of channels this board has
     fn num_channels(&self) -> u8;
+    /// The number of DCAs this board has
+    fn num_dcas(&self) -> u8;
 
     /// Are we actually connected?
     fn connected(&self) -> bool {
         false
     }
     /// Draw the UI for the connection in the board screen
-    fn ui(&self, ui: &mut eframe::egui::Ui) {}
+    fn ui(&mut self, ui: &mut eframe::egui::Ui) {
+        ui.heading("somebody forgot to implement this ui :(");
+    }
 
     /// Fire the provided cue
     fn fire_cue(&mut self, cue: &super::Cue);
 }
 
 /// A list of all of our boards. Use `Connenctions::construct` to pick one from the list.
-#[derive(Default)]
+// Remember to add new entries to the dropdown
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Connections {
     #[default]
     None,
@@ -41,15 +46,47 @@ impl Connections {
     }
 }
 
-pub struct NoConnection {}
+pub struct NoConnection {
+    num_dcas: u8,
+
+    num_dcas_ui: String,
+}
 impl Connectable for NoConnection {
     fn new() -> Self {
-        NoConnection {}
+        NoConnection {
+            num_dcas: 8,
+            num_dcas_ui: "8".to_string(),
+        }
     }
     fn num_channels(&self) -> u8 {
         0
     }
-    fn fire_cue(&mut self, _cue: &super::Cue) {}
+    fn num_dcas(&self) -> u8 {
+        self.num_dcas
+    }
+    fn fire_cue(&mut self, _cue: &super::Cue) {
+        // TODO: log someone tried to fire cue with no thing
+    }
+    fn ui(&mut self, ui: &mut eframe::egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Number of DCAs (for testing):");
+            let response = ui.add(eframe::egui::TextEdit::singleline(&mut self.num_dcas_ui));
+            if response.changed() {
+                let new_val = self.num_dcas_ui.parse::<u8>();
+                match new_val {
+                    Ok(val) => {
+                        if val > 0 {
+                            self.num_dcas = val;
+                        } else {
+                            self.num_dcas = 1;
+                            self.num_dcas_ui = "1".to_string();
+                        }
+                    }
+                    Err(_) => self.num_dcas_ui = self.num_dcas.to_string(),
+                }
+            }
+        });
+    }
 }
 
 /// Represents a channel, which can be assigned to a DCA
