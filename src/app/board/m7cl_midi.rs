@@ -320,10 +320,13 @@ impl M7CLMidi {
     /// Note: takes 7-bit midi bytes, not normal bytes
     fn send(&mut self, message: &[u8]) {
         if let ConnectionState::Connected(conn) = &mut self.conn {
-            let _result = conn.send(message);
-            // TODO: log if error
+            let result = conn.send(message);
+            match result {
+                Ok(()) => log::info!("MIDI message sent"),
+                Err(err) => log::error!("Failed to send MIDI message: {err}"),
+            }
         } else {
-            // TODO: log oopsie
+            log::warn!("`send` MIDI message called but we are disconnected");
         }
     }
 }
@@ -343,7 +346,7 @@ impl M7CLMidi {
                 Err(init_error) => self.conn = ConnectionState::NoMidi(init_error),
             }
         } else {
-            // TODO: implement logging and log that someone did an oopsie
+            log::warn!("`try_init_midi` called but we already initialized MIDI");
         }
     }
     /// For a connection with MIDI initialized but not connected, return the list of available
@@ -352,7 +355,7 @@ impl M7CLMidi {
         if let ConnectionState::YesMidiNoConnection(_, ports, _) = &self.conn {
             Ok(ports.clone())
         } else {
-            // TODO: logging and someone did an oopsie
+            log::warn!("Get `ports` called but is not available in current state");
             Err(())
         }
     }
@@ -361,7 +364,7 @@ impl M7CLMidi {
         if let ConnectionState::YesMidiNoConnection(midi, ports, _) = &mut self.conn {
             *ports = midi.ports();
         } else {
-            // TODO: logging and say someone did an oopsie
+            log::warn!("`update_ports_list` called but is not available in current state");
         }
     }
     /// For a connection with MIDI initialized but not connected, try to connect to the given port
@@ -374,6 +377,7 @@ impl M7CLMidi {
                 match connection {
                     Ok(connection) => ConnectionState::Connected(connection),
                     Err(connection_error) => {
+                        log::error!("Unable to connect to MIDI port: {connection_error}");
                         let error = connection_error.kind();
                         let midi = connection_error.into_inner();
                         let ports = midi.ports();
@@ -381,7 +385,7 @@ impl M7CLMidi {
                     }
                 }
             } else {
-                //TODO: logging and oopsie
+                log::warn!("`try_connect` called but is not available in current state");
                 conn
             }
         });
@@ -396,12 +400,12 @@ impl M7CLMidi {
                     let ports = midi.ports();
                     ConnectionState::YesMidiNoConnection(midi, ports, None)
                 } else {
-                    // TODO: log very bad
+                    log::error!("Should be in state `Connected` from `matches!` above but something has gone very wrong, failed to disconnect");
                     conn
                 }
             })
         } else {
-            // TODO: log oopsie
+            log::warn!("`disconnect` called on a connection which is not connected");
         }
     }
 }

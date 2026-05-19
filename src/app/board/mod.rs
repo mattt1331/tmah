@@ -65,7 +65,7 @@ impl Connectable for NoConnection {
         self.num_dcas
     }
     fn fire_cue(&mut self, _cue: &super::Cue) {
-        // TODO: log someone tried to fire cue with no thing
+        log::warn!("Cue was fired with no connection")
     }
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
         ui.horizontal(|ui| {

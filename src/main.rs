@@ -6,6 +6,9 @@ pub use util::dB;
 use app::State;
 
 fn main() -> eframe::Result {
+    // Enable logging to stderr. Note that on WASM this will have to be different
+    env_logger::init();
+
     // Configure eframe and run app
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
