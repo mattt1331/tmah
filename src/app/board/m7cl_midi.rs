@@ -1,6 +1,7 @@
 //! Contains implementation for connecting to the Yamaha M7CL over MIDI
 
 use crate::app::Cue;
+use eframe::egui::{self, Ui, RichText, Color32};
 use midir::{self, MidiOutput, MidiOutputConnection, MidiOutputPort};
 
 /// The default value of the `no_touchy` setting
@@ -51,14 +52,12 @@ impl super::Connectable for M7CLMidi {
                     num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
                 }
             }
-            Err(init_error) => {
-                M7CLMidi {
-                    conn: ConnectionState::NoMidi(init_error),
-                    no_touchy: DEFAULT_NO_TOUCHY,
-                    board_state: None,
-                    num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
-                }
-            }
+            Err(init_error) => M7CLMidi {
+                conn: ConnectionState::NoMidi(init_error),
+                no_touchy: DEFAULT_NO_TOUCHY,
+                board_state: None,
+                num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
+            },
         }
     }
     fn num_channels(&self) -> u8 {
@@ -70,12 +69,55 @@ impl super::Connectable for M7CLMidi {
     fn fire_cue(&mut self, cue: &Cue) {
         if self.no_touchy && matches!(self.board_state, Some(_)) {
             // no touchy assumes nothing else but this touches the board
-            let Some(ref prev_cue) = self.board_state else { unreachable!("Matched `Some` above") };
+            let Some(ref prev_cue) = self.board_state else {
+                unreachable!("Matched `Some` above")
+            };
             let prev_cue = prev_cue.clone();
             self.fire_cue_diff(cue, &prev_cue);
         } else {
             self.fire_full_cue(cue);
         }
+    }
+    fn ui(&mut self, ui: &mut Ui) {
+        ui.checkbox(&mut self.no_touchy, "No touchy: Assume that nothing other than this application will change mutes or assign DCAs or such");
+        ui.label(format!("Num channels controlled: {}", self.num_channels_controlled));
+        ui.add_space(10.0);
+        match self.conn {
+            ConnectionState::NoMidi(init_error) => {
+                ui.label(RichText::new(format!("Failed to initialize MIDI: {}", init_error)).color(Color32::RED));
+                // Retry button
+                let response = ui.button("Retry");
+                if response.clicked() { self.try_init_midi(); }
+            }
+            ConnectionState::YesMidiNoConnection(..) => {
+                ui.label(RichText::new("MIDI initialized").color(Color32::GREEN));
+                // Dropdown to select MIDI output
+                egui::ComboBox::from_label("Select MIDI output corresponding to M7CL")
+                    .selected_text("Ports")
+                    .show_ui(ui, |ui| {
+                        if let Ok(ports) = self.ports() {
+                            let mut responses = Vec::new();
+                            for port in &ports {
+                                responses.push(ui.button(port.id()));
+                            }
+                            for (i, response) in responses.iter().enumerate() {
+                                if response.clicked() {
+                                    let port = ports[i].clone();
+                                    self.try_connect(port);
+                                }
+                            }
+                        } else {
+                            ui.label("Could not get ports");
+                        }
+                    });
+                // Reload ports list button
+                if ui.button("Reload ports").clicked() { self.update_ports_list(); }
+            }
+            ConnectionState::Connected(_) => {
+                ui.label(RichText::new("Connected").color(Color32::GREEN));
+                if ui.button("Disconnect").clicked() { self.disconnect(); }
+            }
+        };
     }
 }
 
@@ -149,7 +191,9 @@ impl M7CLMidi {
         // Switch from channels of DCA to DCAs of channel
         for (dca_ind, dca) in cue.dcas().iter().enumerate() {
             for channel in dca.assigned() {
-                if channel.index() as usize > channel_dcas.len() - 1 { continue; }
+                if channel.index() as usize > channel_dcas.len() - 1 {
+                    continue;
+                }
                 channel_dcas[channel.index() as usize] |= 0b0000_0001 << dca_ind;
             }
         }
@@ -174,17 +218,13 @@ impl M7CLMidi {
     }
     /// Send the messages to assign/unassign the given channel from the given dca
     fn send_ch_dca(&mut self, ch_ind: u8, dca_ind: u8, assigned: bool) {
-        let data = if assigned {
-            0x01
-        } else {
-            0x00
-        };
+        let data = if assigned { 0x01 } else { 0x00 };
         self.send_prm_sysex(
             0x003f,
             dca_ind as u16,
             ch_ind as u16,
-            [0x00, 0x00, 0x00, 0x00, data]
-            );
+            [0x00, 0x00, 0x00, 0x00, data],
+        );
     }
     /// Send the sequence of midi messages which corresponds to the given NRPN control change
     /// Note: takes normal, not midi, bytes
@@ -198,21 +238,18 @@ impl M7CLMidi {
             0x63,
             // NRPN Parameter MSB value
             param_msb,
-
             // Control change + channel
             0b1011_0000 | MIDI_CHANNEL_IND,
             // NRPN Parameter LSB
             0x62,
             // NRPN Parameter LSB value
             param_lsb,
-
             // Control change + channel
             0b1011_0000 | MIDI_CHANNEL_IND,
             // NRPN Data MSB
             0x06,
             // NRPN Data MSB value
             val_msb,
-
             // Control change + channel
             0b1011_0000 | MIDI_CHANNEL_IND,
             // NRPN Data LSB
@@ -262,7 +299,10 @@ impl M7CLMidi {
     /// Takes two normal bytes and packs them into two midi bytes. Note that this is lossy as midi
     /// bytes are 7 bits.
     fn two_byte_midi_pack(input: u16) -> (u8, u8) {
-        (((input >> 7) & 0b0111_1111) as u8, (input & 0b0111_1111) as u8)
+        (
+            ((input >> 7) & 0b0111_1111) as u8,
+            (input & 0b0111_1111) as u8,
+        )
     }
     /// Send the provided midi message
     /// Note: takes 7-bit midi bytes, not normal bytes
@@ -296,9 +336,9 @@ impl M7CLMidi {
     }
     /// For a connection with MIDI initialized but not connected, return the list of available
     /// ports
-    pub fn ports(&self) -> Result<&midir::MidiOutputPorts, ()> {
+    pub fn ports(&self) -> Result<midir::MidiOutputPorts, ()> {
         if let ConnectionState::YesMidiNoConnection(_, ports, _) = &self.conn {
-            Ok(&ports)
+            Ok(ports.clone())
         } else {
             // TODO: logging and someone did an oopsie
             Err(())
@@ -313,12 +353,12 @@ impl M7CLMidi {
         }
     }
     /// For a connection with MIDI initialized but not connected, try to connect to the given port
-    pub fn try_connect(&mut self, port: &MidiOutputPort) {
+    pub fn try_connect(&mut self, port: MidiOutputPort) {
         // Because connect needs ownership of midi, we need to do this maneuver to get `self.conn`
         // out from behind the reference. Note that we must return `conn` from the closure.
         take_mut::take(&mut self.conn, |conn| {
             if let ConnectionState::YesMidiNoConnection(midi, _, _) = conn {
-                let connection = midi.connect(port, MIDI_CONNECTION_NAME);
+                let connection = midi.connect(&port, MIDI_CONNECTION_NAME);
                 match connection {
                     Ok(connection) => ConnectionState::Connected(connection),
                     Err(connection_error) => {
@@ -333,5 +373,23 @@ impl M7CLMidi {
                 conn
             }
         });
+    }
+    /// For a connection which is connected, disconnect
+    pub fn disconnect(&mut self) {
+        if matches!(self.conn, ConnectionState::Connected(_)) {
+            // See `try_connect` for why we do this
+            take_mut::take(&mut self.conn, |conn| {
+                if let ConnectionState::Connected(conn) = conn {
+                    let midi = conn.close();
+                    let ports = midi.ports();
+                    ConnectionState::YesMidiNoConnection(midi, ports, None)
+                } else {
+                    // TODO: log very bad
+                    conn
+                }
+            })
+        } else {
+            // TODO: log oopsie
+        }
     }
 }

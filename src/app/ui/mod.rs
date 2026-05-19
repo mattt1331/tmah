@@ -29,8 +29,16 @@ impl eframe::App for State {
                     egui::ComboBox::from_label("Select connection type")
                         .selected_text(format!("{:?}", self.connection_ui))
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.connection_ui, board::Connections::None, "None");
-                            ui.selectable_value(&mut self.connection_ui, board::Connections::M7CLMidi, "M7CL over MIDI");
+                            ui.selectable_value(
+                                &mut self.connection_ui,
+                                board::Connections::None,
+                                "None",
+                            );
+                            ui.selectable_value(
+                                &mut self.connection_ui,
+                                board::Connections::M7CLMidi,
+                                "M7CL over MIDI",
+                            );
                         });
                     // Button to activate selected connection
                     if self.connection_ui != self.connection_ui_prev {
