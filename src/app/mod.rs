@@ -59,7 +59,7 @@ enum UiScreen {
 
 /// One singular cue aka scene
 #[derive(Clone)]
-struct Cue {
+pub struct Cue {
     name: String,
     dcas: Vec<DcaState>,
 }
@@ -99,19 +99,10 @@ impl Cue {
 }
 
 /// The state of a DCA, which can be realized by calling a cue
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct DcaState {
     assigned: Vec<Channel>,
     level: Option<dB>,
-}
-
-impl Default for DcaState {
-    fn default() -> Self {
-        DcaState {
-            assigned: Vec::new(),
-            level: None,
-        }
-    }
 }
 
 impl DcaState {

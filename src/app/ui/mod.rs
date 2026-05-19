@@ -42,7 +42,7 @@ impl eframe::App for State {
                         });
                     // Button to activate selected connection
                     if self.connection_ui != self.connection_ui_prev {
-                        let response = ui.button(format!("Activate selected connection"));
+                        let response = ui.button("Activate selected connection");
                         if response.clicked() {
                             self.connection_ui_prev = self.connection_ui.clone();
                             self.connection = self.connection_ui.clone().construct();

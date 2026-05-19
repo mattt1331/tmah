@@ -1,7 +1,7 @@
 //! Contains implementation for connecting to the Yamaha M7CL over MIDI
 
 use crate::app::Cue;
-use eframe::egui::{self, Ui, RichText, Color32};
+use eframe::egui::{self, Color32, RichText, Ui};
 use midir::{self, MidiOutput, MidiOutputConnection, MidiOutputPort};
 
 /// The default value of the `no_touchy` setting
@@ -67,7 +67,7 @@ impl super::Connectable for M7CLMidi {
         8
     }
     fn fire_cue(&mut self, cue: &Cue) {
-        if self.no_touchy && matches!(self.board_state, Some(_)) {
+        if self.no_touchy && self.board_state.is_some() {
             // no touchy assumes nothing else but this touches the board
             let Some(ref prev_cue) = self.board_state else {
                 unreachable!("Matched `Some` above")
@@ -80,14 +80,22 @@ impl super::Connectable for M7CLMidi {
     }
     fn ui(&mut self, ui: &mut Ui) {
         ui.checkbox(&mut self.no_touchy, "No touchy: Assume that nothing other than this application will change mutes or assign DCAs or such");
-        ui.label(format!("Num channels controlled: {}", self.num_channels_controlled));
+        ui.label(format!(
+            "Num channels controlled: {}",
+            self.num_channels_controlled
+        ));
         ui.add_space(10.0);
         match self.conn {
             ConnectionState::NoMidi(init_error) => {
-                ui.label(RichText::new(format!("Failed to initialize MIDI: {}", init_error)).color(Color32::RED));
+                ui.label(
+                    RichText::new(format!("Failed to initialize MIDI: {}", init_error))
+                        .color(Color32::RED),
+                );
                 // Retry button
                 let response = ui.button("Retry");
-                if response.clicked() { self.try_init_midi(); }
+                if response.clicked() {
+                    self.try_init_midi();
+                }
             }
             ConnectionState::YesMidiNoConnection(..) => {
                 ui.label(RichText::new("MIDI initialized").color(Color32::GREEN));
@@ -111,11 +119,15 @@ impl super::Connectable for M7CLMidi {
                         }
                     });
                 // Reload ports list button
-                if ui.button("Reload ports").clicked() { self.update_ports_list(); }
+                if ui.button("Reload ports").clicked() {
+                    self.update_ports_list();
+                }
             }
             ConnectionState::Connected(_) => {
                 ui.label(RichText::new("Connected").color(Color32::GREEN));
-                if ui.button("Disconnect").clicked() { self.disconnect(); }
+                if ui.button("Disconnect").clicked() {
+                    self.disconnect();
+                }
             }
         };
     }
@@ -308,7 +320,7 @@ impl M7CLMidi {
     /// Note: takes 7-bit midi bytes, not normal bytes
     fn send(&mut self, message: &[u8]) {
         if let ConnectionState::Connected(conn) = &mut self.conn {
-            let result = conn.send(message);
+            let _result = conn.send(message);
             // TODO: log if error
         } else {
             // TODO: log oopsie
