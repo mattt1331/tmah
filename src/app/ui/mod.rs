@@ -23,6 +23,7 @@ impl eframe::App for State {
                 }
                 UiScreen::File => {
                     ui.heading("File");
+                    self.file_ui(ui);
                 }
                 UiScreen::Board => {
                     // Dropdown box to select connection
@@ -92,6 +93,17 @@ impl State {
                         })
                     }
                 })
+        });
+    }
+    /// Draw the UI of the file screen
+    fn file_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("save").clicked() {
+                self.brick_save();
+            }
+            if ui.button("load").clicked() {
+                self.brick_load();
+            }
         });
     }
 }

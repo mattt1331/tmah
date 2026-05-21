@@ -1,6 +1,7 @@
 //! Contains the program state and UI
 
 mod board;
+mod file;
 mod ui;
 
 use crate::dB;
@@ -58,7 +59,7 @@ enum UiScreen {
 }
 
 /// One singular cue aka scene
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Cue {
     name: String,
     dcas: Vec<DcaState>,
@@ -99,7 +100,7 @@ impl Cue {
 }
 
 /// The state of a DCA, which can be realized by calling a cue
-#[derive(Clone, Default)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 struct DcaState {
     assigned: Vec<Channel>,
     level: Option<dB>,

@@ -409,7 +409,9 @@ impl M7CLMidi {
                     let ports = midi.ports();
                     ConnectionState::YesMidiNoConnection(midi, ports, None)
                 } else {
-                    log::error!("Should be in state `Connected` from `matches!` above but something has gone very wrong, failed to disconnect");
+                    log::error!(
+                        "Should be in state `Connected` from `matches!` above but something has gone very wrong, failed to disconnect"
+                    );
                     conn
                 }
             })

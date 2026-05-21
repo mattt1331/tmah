@@ -90,7 +90,7 @@ impl Connectable for NoConnection {
 }
 
 /// Represents a channel, which can be assigned to a DCA
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
     index: u8,
 }
