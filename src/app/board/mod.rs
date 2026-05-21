@@ -18,7 +18,7 @@ pub trait Connectable {
     fn connected(&self) -> bool {
         false
     }
-    /// Draw the UI for the connection in the board screen
+    /// Draw the UI specific to the connection in the board screen
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
         ui.heading("somebody forgot to implement this ui :(");
     }

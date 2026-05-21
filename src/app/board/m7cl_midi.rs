@@ -66,6 +66,9 @@ impl super::Connectable for M7CLMidi {
     fn num_dcas(&self) -> u8 {
         8
     }
+    fn connected(&self) -> bool {
+        matches!(self.conn, ConnectionState::Connected(_))
+    }
     fn fire_cue(&mut self, cue: &Cue) {
         if self.no_touchy && self.board_state.is_some() {
             // no touchy assumes nothing else but this touches the board
@@ -97,7 +100,7 @@ impl super::Connectable for M7CLMidi {
                     self.try_init_midi();
                 }
             }
-            ConnectionState::YesMidiNoConnection(..) => {
+            ConnectionState::YesMidiNoConnection(_, _, conn_err) => {
                 ui.label(RichText::new("MIDI initialized").color(Color32::GREEN));
                 // Dropdown to select MIDI output
                 egui::ComboBox::from_label("Select MIDI output corresponding to M7CL")
@@ -121,6 +124,12 @@ impl super::Connectable for M7CLMidi {
                 // Reload ports list button
                 if ui.button("Reload ports").clicked() {
                     self.update_ports_list();
+                }
+                if let Some(conn_err) = conn_err {
+                    ui.label(
+                        RichText::new(format!("Failed to connect: {}", conn_err))
+                            .color(Color32::RED),
+                    );
                 }
             }
             ConnectionState::Connected(_) => {
