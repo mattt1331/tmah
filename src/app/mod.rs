@@ -175,11 +175,19 @@ impl DcaState {
             let mut name = "".to_string();
             for ch in &self.assigned {
                 let ch_name = if let Some(ch_name) = ch_names.get_name(&ch) {
-                    ch_name
+                    if ch_name != "" {
+                        ch_name
+                    } else {
+                        format!("Ch {}", ch.number())
+                    }
                 } else {
                     format!("Ch {}", ch.number())
                 };
-                name = format!("{name}, {}", ch_name)
+                if name == "" {
+                    name = ch_name;
+                } else {
+                    name = format!("{name}, {}", ch_name)
+                }
             }
             format!("{name}")
         }
