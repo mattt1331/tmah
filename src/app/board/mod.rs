@@ -97,11 +97,11 @@ pub struct Channel {
 
 impl Channel {
     /// Returns the zero-indexed index of the channel (eg Ch1 returns 0)
-    fn index(&self) -> u8 {
+    pub fn index(&self) -> u8 {
         self.index
     }
     /// Returns the number of the channel (eg Ch1 returns 1)
-    fn number(&self) -> u8 {
+    pub fn number(&self) -> u8 {
         self.index + 1
     }
 }

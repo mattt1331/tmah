@@ -2,7 +2,7 @@
 
 use super::board;
 use super::{State, UiScreen};
-use eframe::egui::{self, ScrollArea};
+use eframe::egui::{self, Frame, ScrollArea};
 use egui_extras::{Column, TableBuilder};
 
 impl eframe::App for State {
@@ -63,37 +63,49 @@ impl State {
     /// Draw the UI of the area that shows the cues and DCAs
     fn cues_ui(&mut self, ui: &mut egui::Ui) {
         const HEADER_HEIGHT: f32 = 20.0;
-        const ROW_HEIGHT: f32 = 20.0;
-        ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-            let num_dcas = self.num_dcas();
-            TableBuilder::new(ui)
-                // All columns must be "pre-allocated"
-                .columns(Column::auto(), (num_dcas + 1).into())
-                .header(HEADER_HEIGHT, |mut header| {
+        const ROW_HEIGHT: f32 = 30.0;
+
+        let num_dcas = self.num_dcas();
+        TableBuilder::new(ui)
+            // All columns must be "pre-allocated"
+            .columns(Column::auto(), (num_dcas + 1).into())
+            .auto_shrink(egui::Vec2b::FALSE)
+            .striped(true)
+            .header(HEADER_HEIGHT, |mut header| {
+                header.col(|ui| {
+                    ui.heading("Cue");
+                });
+                for i in 0..num_dcas {
                     header.col(|ui| {
-                        ui.heading("Cue");
+                        ui.heading(format!("DCA {}", i + 1));
                     });
-                    for i in 0..num_dcas {
-                        header.col(|ui| {
-                            ui.heading(format!("DCA {}", i + 1));
+                }
+            })
+            .body(|mut body| {
+                body.rows(ROW_HEIGHT, self.cues().len(), |mut row| {
+                    let i = row.index();
+                    let cue = &self.cues()[i];
+                    row.col(|ui| {
+                        ui.label(cue.name());
+                    });
+                    for (i, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
+                        row.col(|ui| {
+                            let dca_name = dca.name(self.channel_names());
+                            if dca_name != "" {
+                                ui.label(format!("{}", dca.name(self.channel_names())));
+                            } else {
+                                ui.centered_and_justified(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(format!("{}", i+1))
+                                            .weak()
+                                            .italics()
+                                    );
+                                });
+                            }
                         });
                     }
                 })
-                .body(|mut body| {
-                    for cue in self.cues() {
-                        body.row(ROW_HEIGHT, |mut row| {
-                            row.col(|ui| {
-                                ui.label(cue.name());
-                            });
-                            for dca in cue.dcas().iter().take(num_dcas.into()) {
-                                row.col(|ui| {
-                                    ui.label(dca.name());
-                                });
-                            }
-                        })
-                    }
-                })
-        });
+            });
     }
     /// Draw the UI of the file screen
     fn file_ui(&mut self, ui: &mut egui::Ui) {

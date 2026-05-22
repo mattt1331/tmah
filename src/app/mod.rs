@@ -11,6 +11,7 @@ use board::{Channel, Connectable};
 pub struct State {
     // Actual program state
     cues: Vec<Cue>,
+    ch_names: ChannelNames,
     connection: Box<dyn board::Connectable>,
 
     // UI state etc
@@ -24,7 +25,52 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         State {
-            cues: vec![Cue::default(), Cue::default(), Cue::default()],
+            cues: vec![
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+                Cue::default(),
+            ],
+            ch_names: ChannelNames::default(),
             connection: Box::new(board::NoConnection::new()),
 
             ui_screen: UiScreen::default(),
@@ -43,6 +89,9 @@ impl State {
     }
     pub fn cues(&self) -> &Vec<Cue> {
         &self.cues
+    }
+    pub fn channel_names(&self) -> &ChannelNames {
+        &self.ch_names
     }
     pub fn connection(&self) -> &Box<dyn board::Connectable> {
         &self.connection
@@ -103,14 +152,43 @@ impl Cue {
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 struct DcaState {
     assigned: Vec<Channel>,
+    name: Option<String>,
     level: Option<dB>,
 }
 
 impl DcaState {
-    fn name(&self) -> String {
-        "DCA names not impl".to_string()
+    fn name(&self, ch_names: &ChannelNames) -> String {
+        if let Some(name) = &self.name {
+            name.clone()
+        } else {
+            let mut name = "".to_string();
+            for ch in &self.assigned {
+                let ch_name = if let Some(ch_name) = ch_names.get_name(&ch) {
+                    ch_name
+                } else {
+                    format!("Ch {}", ch.number())
+                };
+                name = format!("{name}, {}", ch_name)
+            }
+            format!("{name}")
+        }
     }
     fn assigned(&self) -> &Vec<Channel> {
         &self.assigned
+    }
+}
+
+/// Contains the names of each channel
+#[derive(Default)]
+struct ChannelNames {
+    // Keys are the index of the channel
+    names: std::collections::HashMap<u8, String>,
+}
+impl ChannelNames {
+    fn set_name(&mut self, ch: &Channel, name: String) {
+        self.names.insert(ch.index(), name);
+    }
+    fn get_name(&self, ch: &Channel) -> Option<String> {
+        self.names.get(&ch.index()).map(|name| format!("{name}"))
     }
 }
