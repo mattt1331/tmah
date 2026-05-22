@@ -1,9 +1,30 @@
 //! Contains all the UI
 
 use super::board;
-use super::{State, UiScreen};
+use super::{Channel, State};
 use eframe::egui::{self, Frame, ScrollArea};
 use egui_extras::{Column, TableBuilder};
+
+/// The different screens of the ui, like the cues, board connection, etc
+#[derive(Default, PartialEq)]
+pub enum UiScreen {
+    #[default]
+    Cues,
+    File,
+    Board,
+}
+
+/// Whether and what popup is active in the cues screen
+#[derive(Default)]
+pub enum CuesPopup {
+    #[default]
+    None,
+    EditChannelNames,
+    EditDcaAssign {
+        cue_ind: usize,
+        dca_ind: usize,
+    },
+}
 
 impl eframe::App for State {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -62,15 +83,26 @@ impl eframe::App for State {
 impl State {
     /// Draw the UI of the area that shows the cues and DCAs
     fn cues_ui(&mut self, ui: &mut egui::Ui) {
+        self.cues_ui_popup(ui);
+
+        ui.horizontal(|ui| {
+            if ui.button("Channel names").clicked() {
+                self.open_cues_popup(CuesPopup::EditChannelNames);
+            }
+        });
+        ui.add_space(10.0);
+
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 30.0;
 
+        let mut double_clicked_cell: Option<(usize, usize)> = None;
         let num_dcas = self.num_dcas();
         TableBuilder::new(ui)
             // All columns must be "pre-allocated"
             .columns(Column::auto(), (num_dcas + 1).into())
             .auto_shrink(egui::Vec2b::FALSE)
             .striped(true)
+            .sense(egui::Sense::click())
             .header(HEADER_HEIGHT, |mut header| {
                 header.col(|ui| {
                     ui.heading("Cue");
@@ -88,24 +120,129 @@ impl State {
                     row.col(|ui| {
                         ui.label(cue.name());
                     });
-                    for (i, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
-                        row.col(|ui| {
+                    for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
+                        let (_, response) = row.col(|ui| {
                             let dca_name = dca.name(self.channel_names());
                             if dca_name != "" {
-                                ui.label(format!("{}", dca.name(self.channel_names())));
+                                ui.add(
+                                    egui::Label::new(format!("{}", dca.name(self.channel_names())))
+                                        .selectable(false),
+                                );
                             } else {
                                 ui.centered_and_justified(|ui| {
-                                    ui.label(
-                                        egui::RichText::new(format!("{}", i+1))
-                                            .weak()
-                                            .italics()
+                                    ui.add(
+                                        egui::Label::new(
+                                            egui::RichText::new(format!("{}", j + 1))
+                                                .weak()
+                                                .italics(),
+                                        )
+                                        .selectable(false),
                                     );
                                 });
                             }
                         });
+                        if response.double_clicked() {
+                            double_clicked_cell = Some((i, j));
+                        }
                     }
                 })
             });
+        if let Some((i, j)) = double_clicked_cell {
+            self.open_cues_popup(CuesPopup::EditDcaAssign {
+                cue_ind: i,
+                dca_ind: j,
+            })
+        }
+    }
+    /// Draw the popup, if any, in the cues screen
+    fn cues_ui_popup(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx();
+        if !ctx.egui_wants_keyboard_input() && ctx.input(|input| input.key_down(egui::Key::Escape))
+        {
+            self.clear_cues_popup();
+        }
+        match self.cues_popup {
+            CuesPopup::None => (),
+            CuesPopup::EditChannelNames => {
+                egui::Window::new("Edit Channel Names")
+                    .title_bar(false)
+                    .show(ui.ctx(), |ui| {
+                        ui.heading("Edit channel names");
+                        TableBuilder::new(ui)
+                            .columns(Column::auto(), 2)
+                            .striped(true)
+                            .header(20.0, |mut header| {
+                                header.col(|ui| {
+                                    ui.heading("Channel");
+                                });
+                                header.col(|ui| {
+                                    ui.heading("Name");
+                                });
+                            })
+                            .body(|mut body| {
+                                body.rows(20.0, self.num_channels().into(), |mut row| {
+                                    let i = row.index();
+                                    row.col(|ui| {
+                                        ui.label(format!("Channel {}", i + 1));
+                                    });
+                                    row.col(|ui| {
+                                        let Ok(i) = TryInto::<u8>::try_into(i) else {
+                                            return;
+                                        };
+                                        ui.text_edit_singleline(
+                                            self.channel_names_mut()
+                                                .edit_name(&Channel::from_index(i)),
+                                        );
+                                    });
+                                })
+                            })
+                    });
+            }
+            CuesPopup::EditDcaAssign { cue_ind, dca_ind } => {
+                egui::Window::new("Edit DCA Assignments")
+                    .title_bar(false)
+                    .show(ui.ctx(), |ui| {
+                        let dca_name =
+                            self.cues()[cue_ind].dcas()[dca_ind].name(self.channel_names());
+                        let dca_name = if dca_name != "" {
+                            dca_name
+                        } else {
+                            (dca_ind + 1).to_string()
+                        };
+                        ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
+                        let num_channels = self.num_channels();
+                        let mut assigned: Vec<bool> = Vec::with_capacity(num_channels.into());
+                        for _ in 0..num_channels {
+                            assigned.push(false);
+                        }
+                        for ch in self.cues()[cue_ind].dcas()[dca_ind].assigned() {
+                            assigned[ch.index() as usize] = true;
+                        }
+                        let assigned_pre = assigned.clone();
+                        for i in 0..num_channels {
+                            let ch_name = self
+                                .channel_names()
+                                .get_name(&Channel::from_index(i))
+                                .unwrap_or_else(|| format!("Channel {}", i + 1));
+                            let ch_name = if ch_name != "" {
+                                ch_name
+                            } else {
+                                format!("Channel {}", i + 1)
+                            };
+                            ui.checkbox(&mut assigned[i as usize], ch_name);
+                        }
+                        for (ch_ind, (pre, post)) in assigned_pre.iter().zip(assigned.iter()).enumerate() {
+                            if pre != post {
+                                if *post {
+                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind].assign(Channel::from_index(ch_ind as u8))
+                                } else {
+                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind].unassign(Channel::from_index(ch_ind as u8))
+                                }
+                            }
+                        }
+                    });
+            }
+        }
     }
     /// Draw the UI of the file screen
     fn file_ui(&mut self, ui: &mut egui::Ui) {

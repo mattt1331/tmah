@@ -15,7 +15,8 @@ pub struct State {
     connection: Box<dyn board::Connectable>,
 
     // UI state etc
-    ui_screen: UiScreen,
+    ui_screen: ui::UiScreen,
+    cues_popup: ui::CuesPopup,
     /// The connection selected in the dropdown on the board screen
     connection_ui: board::Connections,
     /// The currently active connection to difference with above
@@ -73,7 +74,8 @@ impl Default for State {
             ch_names: ChannelNames::default(),
             connection: Box::new(board::NoConnection::new()),
 
-            ui_screen: UiScreen::default(),
+            ui_screen: ui::UiScreen::default(),
+            cues_popup: ui::CuesPopup::default(),
             connection_ui: board::Connections::default(),
             connection_ui_prev: board::Connections::default(),
         }
@@ -87,24 +89,30 @@ impl State {
     pub fn num_dcas(&self) -> u8 {
         self.connection.num_dcas()
     }
+    pub fn num_channels(&self) -> u8 {
+        self.connection.num_channels()
+    }
     pub fn cues(&self) -> &Vec<Cue> {
         &self.cues
+    }
+    pub fn cues_mut(&mut self) -> &mut Vec<Cue> {
+        &mut self.cues
     }
     pub fn channel_names(&self) -> &ChannelNames {
         &self.ch_names
     }
+    pub fn channel_names_mut(&mut self) -> &mut ChannelNames {
+        &mut self.ch_names
+    }
+    pub fn open_cues_popup(&mut self, popup: ui::CuesPopup) {
+        self.cues_popup = popup;
+    }
+    pub fn clear_cues_popup(&mut self) {
+        self.cues_popup = ui::CuesPopup::None;
+    }
     pub fn connection(&self) -> &Box<dyn board::Connectable> {
         &self.connection
     }
-}
-
-/// The different screens of the ui, like the cues, board connection, etc
-#[derive(Default, PartialEq)]
-enum UiScreen {
-    #[default]
-    Cues,
-    File,
-    Board,
 }
 
 /// One singular cue aka scene
@@ -138,6 +146,9 @@ impl Cue {
     }
     fn dcas(&self) -> &Vec<DcaState> {
         &self.dcas
+    }
+    fn dcas_mut(&mut self) -> &mut Vec<DcaState> {
+        &mut self.dcas
     }
     /// Takes this cue and has the provided `top` cue override any parameters that `top` sets.
     /// Currently this just returns `top` but when EQs and crap get added this will make much more
@@ -176,6 +187,23 @@ impl DcaState {
     fn assigned(&self) -> &Vec<Channel> {
         &self.assigned
     }
+    fn assign(&mut self, ch: Channel) {
+        if !self.assigned.contains(&ch) {
+            self.assigned.push(ch);
+        }
+    }
+    fn unassign(&mut self, ch: Channel) {
+        let mut ind = None;
+        for (i, channel) in self.assigned.iter().enumerate() {
+            if *channel == ch {
+                ind = Some(i);
+            }
+        }
+        if let Some(ind) = ind {
+            // `swap_remove` for performance (absolutely crucial here)
+            self.assigned.swap_remove(ind);
+        }
+    }
 }
 
 /// Contains the names of each channel
@@ -187,6 +215,9 @@ struct ChannelNames {
 impl ChannelNames {
     fn set_name(&mut self, ch: &Channel, name: String) {
         self.names.insert(ch.index(), name);
+    }
+    fn edit_name(&mut self, ch: &Channel) -> &mut String {
+        self.names.entry(ch.index()).or_insert("".to_string())
     }
     fn get_name(&self, ch: &Channel) -> Option<String> {
         self.names.get(&ch.index()).map(|name| format!("{name}"))

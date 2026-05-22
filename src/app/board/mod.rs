@@ -48,18 +48,22 @@ impl Connections {
 
 pub struct NoConnection {
     num_dcas: u8,
+    num_channels: u8,
 
     num_dcas_ui: String,
+    num_channels_ui: String,
 }
 impl Connectable for NoConnection {
     fn new() -> Self {
         NoConnection {
             num_dcas: 8,
+            num_channels: 20,
             num_dcas_ui: "8".to_string(),
+            num_channels_ui: "20".to_string(),
         }
     }
     fn num_channels(&self) -> u8 {
-        0
+        self.num_channels
     }
     fn num_dcas(&self) -> u8 {
         self.num_dcas
@@ -86,16 +90,49 @@ impl Connectable for NoConnection {
                 }
             }
         });
+        ui.horizontal(|ui| {
+            ui.label("Number of channels (for testing):");
+            let response = ui.add(eframe::egui::TextEdit::singleline(
+                &mut self.num_channels_ui,
+            ));
+            if response.changed() {
+                let new_val = self.num_channels_ui.parse::<u8>();
+                match new_val {
+                    Ok(val) => {
+                        if val > 0 {
+                            self.num_channels = val;
+                        } else {
+                            self.num_channels = 1;
+                            self.num_channels_ui = "1".to_string();
+                        }
+                    }
+                    Err(_) => self.num_channels_ui = self.num_channels.to_string(),
+                }
+            }
+        });
     }
 }
 
 /// Represents a channel, which can be assigned to a DCA
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
     index: u8,
 }
 
 impl Channel {
+    /// Returns a `Channel` with the specified index (eg `ind` = 0 -> Ch1)
+    pub fn from_index(ind: u8) -> Self {
+        Channel { index: ind }
+    }
+    /// Returns a `Channel` with the specified number (eg `num` = 1 -> Ch1). Returns None if `num` is
+    /// zero.
+    pub fn from_number(num: u8) -> Option<Channel> {
+        if num == 0 {
+            None
+        } else {
+            Some(Channel { index: num - 1 })
+        }
+    }
     /// Returns the zero-indexed index of the channel (eg Ch1 returns 0)
     pub fn index(&self) -> u8 {
         self.index
