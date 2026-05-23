@@ -215,7 +215,7 @@ impl DcaState {
 }
 
 /// Contains the names of each channel
-#[derive(Default)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 struct ChannelNames {
     // Keys are the index of the channel
     names: std::collections::HashMap<u8, String>,

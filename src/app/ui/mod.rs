@@ -231,12 +231,16 @@ impl State {
                             };
                             ui.checkbox(&mut assigned[i as usize], ch_name);
                         }
-                        for (ch_ind, (pre, post)) in assigned_pre.iter().zip(assigned.iter()).enumerate() {
+                        for (ch_ind, (pre, post)) in
+                            assigned_pre.iter().zip(assigned.iter()).enumerate()
+                        {
                             if pre != post {
                                 if *post {
-                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind].assign(Channel::from_index(ch_ind as u8))
+                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind]
+                                        .assign(Channel::from_index(ch_ind as u8))
                                 } else {
-                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind].unassign(Channel::from_index(ch_ind as u8))
+                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind]
+                                        .unassign(Channel::from_index(ch_ind as u8))
                                 }
                             }
                         }

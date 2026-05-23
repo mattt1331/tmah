@@ -1,12 +1,12 @@
 //! Module containing serialization and deserialization of show file
 
-use super::{Cue, State};
+use super::{ChannelNames, Cue, State};
 
 /// Data saved in the show file
 #[derive(serde::Serialize, serde::Deserialize)]
 struct FileData {
     cues: Vec<Cue>,
-    // TODO: connections serialization
+    channel_names: ChannelNames, // TODO: connections serialization
 }
 
 impl State {
@@ -16,11 +16,13 @@ impl State {
         // Do that first pls
         FileData {
             cues: self.cues.clone(),
+            channel_names: self.ch_names.clone(),
         }
     }
     /// Loads the given data (ie sets state equal to provided values)
     pub fn load_file_data(&mut self, data: FileData) {
         self.cues = data.cues;
+        self.ch_names = data.channel_names;
     }
     // Brick because they're dumb like bricks and only temprorary im tired
     pub fn brick_save(&self) {
