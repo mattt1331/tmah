@@ -124,10 +124,15 @@ impl State {
                         let (_, response) = row.col(|ui| {
                             let dca_name = dca.name(self.channel_names());
                             if dca_name != "" {
-                                ui.add(
-                                    egui::Label::new(format!("{}", dca.name(self.channel_names())))
-                                        .selectable(false),
-                                );
+                                let layout = egui::Layout::top_down(egui::Align::Center)
+                                    .with_main_justify(true)
+                                    .with_cross_align(egui::Align::Center);
+                                ui.with_layout(layout, |ui| {
+                                    ui.add(
+                                        egui::Label::new(format!("{}", dca.name(self.channel_names())))
+                                            .selectable(false),
+                                    );
+                                });
                             } else {
                                 ui.centered_and_justified(|ui| {
                                     ui.add(
@@ -209,7 +214,28 @@ impl State {
                         } else {
                             (dca_ind + 1).to_string()
                         };
+                        // Heading
                         ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
+                        ui.add_space(10.0);
+                        // DCA name edit
+                        ui.horizontal(|ui| {
+                            ui.label("Name:");
+                            let dca_name = self.cues_mut()[cue_ind].dcas_mut()[dca_ind].edit_name();
+                            if let Some(name) = dca_name {
+                                ui.text_edit_singleline(name);
+                                if name == "" {
+                                    *dca_name = None;
+                                }
+                            } else {
+                                let mut name = "".to_string();
+                                ui.text_edit_singleline(&mut name);
+                                if name != "" {
+                                    *dca_name = Some(name);
+                                }
+                            }
+                        });
+                        ui.add_space(10.0);
+                        // Channel assignments
                         let num_channels = self.num_channels();
                         let mut assigned: Vec<bool> = Vec::with_capacity(num_channels.into());
                         for _ in 0..num_channels {

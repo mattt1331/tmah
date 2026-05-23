@@ -192,14 +192,19 @@ impl DcaState {
             format!("{name}")
         }
     }
+    fn edit_name(&mut self) -> &mut Option<String> {
+        &mut self.name
+    }
     fn assigned(&self) -> &Vec<Channel> {
         &self.assigned
     }
+    /// Assigns the given channel to this DCA
     fn assign(&mut self, ch: Channel) {
         if !self.assigned.contains(&ch) {
             self.assigned.push(ch);
         }
     }
+    /// Unassigns the given channel from this DCA
     fn unassign(&mut self, ch: Channel) {
         let mut ind = None;
         for (i, channel) in self.assigned.iter().enumerate() {
@@ -221,12 +226,15 @@ struct ChannelNames {
     names: std::collections::HashMap<u8, String>,
 }
 impl ChannelNames {
+    /// Set the name of the given channel
     fn set_name(&mut self, ch: &Channel, name: String) {
         self.names.insert(ch.index(), name);
     }
+    /// Returns a mutable reference to the given channel's name
     fn edit_name(&mut self, ch: &Channel) -> &mut String {
         self.names.entry(ch.index()).or_insert("".to_string())
     }
+    /// Returns the name of the channel, if set
     fn get_name(&self, ch: &Channel) -> Option<String> {
         self.names.get(&ch.index()).map(|name| format!("{name}"))
     }
