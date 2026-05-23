@@ -75,7 +75,27 @@ impl State {
         self.cues_selected_cue_ind
     }
     pub fn set_selected_cue(&mut self, cue_ind: Option<usize>) {
-        self.cues_selected_cue_ind = cue_ind;
+        if let Some(ind) = cue_ind
+            && ind < self.cues.len()
+        {
+            self.cues_selected_cue_ind = cue_ind;
+        } else {
+            self.cues_selected_cue_ind = None;
+        }
+    }
+    pub fn fire_selected_cue(&mut self) {
+        if let Some(ind) = self.cues_selected_cue_ind {
+            self.connection.fire_cue(&self.cues[ind]);
+        }
+    }
+    pub fn fire_next_cue(&mut self) {
+        if let Some(ind) = self.cues_selected_cue_ind {
+            self.set_selected_cue(Some(ind+1));
+            self.fire_selected_cue();
+        } else {
+            self.set_selected_cue(Some(0));
+            self.fire_selected_cue();
+        }
     }
     pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
         &self.cues_edit_action
@@ -153,8 +173,8 @@ impl DcaState {
         } else {
             let mut name = "".to_string();
             for ch in &self.assigned {
-                let ch_name = if let Some(ch_name) = ch_names.get_name(&ch) {
-                    if ch_name != "" {
+                let ch_name = if let Some(ch_name) = ch_names.get_name(ch) {
+                    if !ch_name.is_empty() {
                         ch_name
                     } else {
                         format!("Ch {}", ch.number())
@@ -162,13 +182,13 @@ impl DcaState {
                 } else {
                     format!("Ch {}", ch.number())
                 };
-                if name == "" {
+                if !name.is_empty() {
                     name = ch_name;
                 } else {
                     name = format!("{name}, {}", ch_name)
                 }
             }
-            format!("{name}")
+            name.to_string()
         }
     }
     fn edit_name(&mut self) -> &mut Option<String> {
@@ -200,7 +220,7 @@ impl DcaState {
 
 /// Contains the names of each channel
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
-struct ChannelNames {
+pub struct ChannelNames {
     // Keys are the index of the channel
     names: std::collections::HashMap<u8, String>,
 }
@@ -215,6 +235,6 @@ impl ChannelNames {
     }
     /// Returns the name of the channel, if set
     fn get_name(&self, ch: &Channel) -> Option<String> {
-        self.names.get(&ch.index()).map(|name| format!("{name}"))
+        self.names.get(&ch.index()).map(|name| name.to_string())
     }
 }

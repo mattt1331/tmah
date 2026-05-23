@@ -2,7 +2,7 @@
 
 use super::board;
 use super::{Channel, State};
-use eframe::egui::{self, Frame, ScrollArea};
+use eframe::egui;
 use egui_extras::{Column, TableBuilder};
 
 /// The different screens of the ui, like the cues, board connection, etc
@@ -100,6 +100,7 @@ impl State {
         const ROW_HEIGHT: f32 = 30.0;
         const DESC_WIDTH: f32 = 300.0;
 
+        // Draw the ui
         let mut double_clicked_cell: Option<(usize, usize)> = None;
         let num_dcas = self.num_dcas();
         TableBuilder::new(ui)
@@ -114,16 +115,18 @@ impl State {
                 header.col(|ui| {
                     ui.heading("Cue");
                 });
-                header.col(|ui| { ui.vertical_centered( |ui| {
-                    ui.heading("Desc");
-                }); });
+                header.col(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.heading("Desc");
+                    });
+                });
                 for i in 0..num_dcas {
                     header.col(|ui| {
                         ui.heading(format!("DCA {}", i + 1));
                     });
                 }
             })
-            .body(|mut body| {
+            .body(|body| {
                 body.rows(ROW_HEIGHT, self.cues().len(), |mut row| {
                     row.set_hovered(false); // Otherwise it does an ugly highlight when you mouse over
 
@@ -136,19 +139,24 @@ impl State {
                         row.set_selected(true);
                     }
 
+                    // Cue
                     row.col(|ui| {
                         ui.horizontal_centered(|ui| {
                             ui.label(format!("{i}"));
                         });
                     });
+                    // Desc
                     let desc_response = row.col(|ui| {
                         let layout = egui::Layout::left_to_right(egui::Align::Center)
                             .with_main_wrap(true)
                             .with_cross_justify(true);
                         ui.with_layout(layout, |ui| {
-                            if let CuesEditAction::EditCueDesc { cue_ind } = *self.cues_edit_action()
-                                && cue_ind == i {
-                                let response = ui.text_edit_singleline(self.cues_mut()[cue_ind].edit_name());
+                            if let CuesEditAction::EditCueDesc { cue_ind } =
+                                *self.cues_edit_action()
+                                && cue_ind == i
+                            {
+                                let response =
+                                    ui.text_edit_singleline(self.cues_mut()[cue_ind].edit_name());
                                 if response.lost_focus() {
                                     self.clear_cues_edit_action();
                                 }
@@ -161,20 +169,18 @@ impl State {
                     if desc_response.1.double_clicked() {
                         self.do_cues_edit_action(CuesEditAction::EditCueDesc { cue_ind: i })
                     }
+                    // DCAs
                     let cue = &self.cues()[i];
                     for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
                         let (_, response) = row.col(|ui| {
                             let dca_name = dca.name(self.channel_names());
-                            if dca_name != "" {
+                            if !dca_name.is_empty() {
                                 let layout = egui::Layout::top_down(egui::Align::Center)
                                     .with_main_justify(true)
                                     .with_cross_align(egui::Align::Center);
                                 ui.with_layout(layout, |ui| {
                                     ui.add(
-                                        egui::Label::new(format!(
-                                            "{}",
-                                            dca.name(self.channel_names())
-                                        ))
+                                        egui::Label::new(dca.name(self.channel_names()).to_string())
                                         .selectable(false),
                                     );
                                 });
@@ -197,7 +203,8 @@ impl State {
                     }
                     // Select row if clicked
                     if row.response().clicked() {
-                        self.set_selected_cue(Some(i))
+                        self.set_selected_cue(Some(i));
+                        self.fire_selected_cue();
                     }
                 })
             });
@@ -208,6 +215,12 @@ impl State {
                 cue_ind: i,
                 dca_ind: j,
             })
+        }
+
+        if ui.ctx().input(|input| input.key_pressed(egui::Key::Space))
+            && matches!(self.cues_edit_action(), CuesEditAction::None)
+        {
+            self.fire_next_cue();
         }
     }
     /// Draw the popup, if any, in the cues screen
@@ -235,7 +248,7 @@ impl State {
                                     ui.heading("Name");
                                 });
                             })
-                            .body(|mut body| {
+                            .body(|body| {
                                 body.rows(20.0, self.num_channels().into(), |mut row| {
                                     let i = row.index();
                                     row.col(|ui| {
@@ -260,7 +273,7 @@ impl State {
                     .show(ui.ctx(), |ui| {
                         let dca_name =
                             self.cues()[cue_ind].dcas()[dca_ind].name(self.channel_names());
-                        let dca_name = if dca_name != "" {
+                        let dca_name = if !dca_name.is_empty() {
                             dca_name
                         } else {
                             (dca_ind + 1).to_string()
@@ -274,13 +287,13 @@ impl State {
                             let dca_name = self.cues_mut()[cue_ind].dcas_mut()[dca_ind].edit_name();
                             if let Some(name) = dca_name {
                                 ui.text_edit_singleline(name);
-                                if name == "" {
+                                if !name.is_empty() {
                                     *dca_name = None;
                                 }
                             } else {
                                 let mut name = "".to_string();
                                 ui.text_edit_singleline(&mut name);
-                                if name != "" {
+                                if !name.is_empty() {
                                     *dca_name = Some(name);
                                 }
                             }
@@ -288,10 +301,7 @@ impl State {
                         ui.add_space(10.0);
                         // Channel assignments
                         let num_channels = self.num_channels();
-                        let mut assigned: Vec<bool> = Vec::with_capacity(num_channels.into());
-                        for _ in 0..num_channels {
-                            assigned.push(false);
-                        }
+                        let mut assigned: Vec<bool> = vec![false; num_channels.into()];
                         for ch in self.cues()[cue_ind].dcas()[dca_ind].assigned() {
                             assigned[ch.index() as usize] = true;
                         }
@@ -301,7 +311,7 @@ impl State {
                                 .channel_names()
                                 .get_name(&Channel::from_index(i))
                                 .unwrap_or_else(|| format!("Channel {}", i + 1));
-                            let ch_name = if ch_name != "" {
+                            let ch_name = if !ch_name.is_empty() {
                                 ch_name
                             } else {
                                 format!("Channel {}", i + 1)

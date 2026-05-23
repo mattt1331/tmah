@@ -4,7 +4,7 @@ use super::{ChannelNames, Cue, State};
 
 /// Data saved in the show file
 #[derive(serde::Serialize, serde::Deserialize)]
-struct FileData {
+pub struct FileData {
     cues: Vec<Cue>,
     channel_names: ChannelNames, // TODO: connections serialization
 }
