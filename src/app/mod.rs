@@ -17,6 +17,7 @@ pub struct State {
     // UI state etc
     ui_screen: ui::UiScreen,
     cues_popup: ui::CuesPopup,
+    cues_selected_cue_ind: Option<usize>,
     /// The connection selected in the dropdown on the board screen
     connection_ui: board::Connections,
     /// The currently active connection to difference with above
@@ -34,48 +35,13 @@ impl Default for State {
                 Cue::default(),
                 Cue::default(),
                 Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
             ],
             ch_names: ChannelNames::default(),
             connection: Box::new(board::NoConnection::new()),
 
             ui_screen: ui::UiScreen::default(),
             cues_popup: ui::CuesPopup::default(),
+            cues_selected_cue_ind: None,
             connection_ui: board::Connections::default(),
             connection_ui_prev: board::Connections::default(),
         }
@@ -103,6 +69,12 @@ impl State {
     }
     pub fn channel_names_mut(&mut self) -> &mut ChannelNames {
         &mut self.ch_names
+    }
+    pub fn selected_cue(&self) -> Option<usize> {
+        self.cues_selected_cue_ind
+    }
+    pub fn set_selected_cue(&mut self, cue_ind: Option<usize>) {
+        self.cues_selected_cue_ind = cue_ind;
     }
     pub fn open_cues_popup(&mut self, popup: ui::CuesPopup) {
         self.cues_popup = popup;
@@ -202,6 +174,7 @@ impl DcaState {
     fn assign(&mut self, ch: Channel) {
         if !self.assigned.contains(&ch) {
             self.assigned.push(ch);
+            self.assigned.sort();
         }
     }
     /// Unassigns the given channel from this DCA
@@ -213,8 +186,7 @@ impl DcaState {
             }
         }
         if let Some(ind) = ind {
-            // `swap_remove` for performance (absolutely crucial here)
-            self.assigned.swap_remove(ind);
+            self.assigned.remove(ind);
         }
     }
 }

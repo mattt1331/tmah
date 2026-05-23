@@ -81,6 +81,7 @@ impl eframe::App for State {
 
 /// UI
 impl State {
+    // TODO: Extract stuff into seperate functions
     /// Draw the UI of the area that shows the cues and DCAs
     fn cues_ui(&mut self, ui: &mut egui::Ui) {
         self.cues_ui_popup(ui);
@@ -115,7 +116,14 @@ impl State {
             })
             .body(|mut body| {
                 body.rows(ROW_HEIGHT, self.cues().len(), |mut row| {
+                    row.set_hovered(false); // Otherwise it does an ugly highlight when you mouse over
+
                     let i = row.index();
+                    if let Some(sel_ind) = self.selected_cue()
+                        && sel_ind == i
+                    {
+                        row.set_selected(true);
+                    }
                     let cue = &self.cues()[i];
                     row.col(|ui| {
                         ui.label(cue.name());
@@ -129,8 +137,11 @@ impl State {
                                     .with_cross_align(egui::Align::Center);
                                 ui.with_layout(layout, |ui| {
                                     ui.add(
-                                        egui::Label::new(format!("{}", dca.name(self.channel_names())))
-                                            .selectable(false),
+                                        egui::Label::new(format!(
+                                            "{}",
+                                            dca.name(self.channel_names())
+                                        ))
+                                        .selectable(false),
                                     );
                                 });
                             } else {
@@ -149,6 +160,10 @@ impl State {
                         if response.double_clicked() {
                             double_clicked_cell = Some((i, j));
                         }
+                    }
+                    // Select row if clicked
+                    if row.response().clicked() {
+                        self.set_selected_cue(Some(i))
                     }
                 })
             });

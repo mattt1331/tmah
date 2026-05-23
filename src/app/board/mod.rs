@@ -114,7 +114,7 @@ impl Connectable for NoConnection {
 }
 
 /// Represents a channel, which can be assigned to a DCA
-#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, PartialOrd, Ord, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
     index: u8,
 }
