@@ -16,7 +16,8 @@ pub struct State {
 
     // UI state etc
     ui_screen: ui::UiScreen,
-    cues_popup: ui::CuesPopup,
+    /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
+    cues_edit_action: ui::CuesEditAction,
     cues_selected_cue_ind: Option<usize>,
     /// The connection selected in the dropdown on the board screen
     connection_ui: board::Connections,
@@ -40,7 +41,7 @@ impl Default for State {
             connection: Box::new(board::NoConnection::new()),
 
             ui_screen: ui::UiScreen::default(),
-            cues_popup: ui::CuesPopup::default(),
+            cues_edit_action: ui::CuesEditAction::default(),
             cues_selected_cue_ind: None,
             connection_ui: board::Connections::default(),
             connection_ui_prev: board::Connections::default(),
@@ -76,11 +77,14 @@ impl State {
     pub fn set_selected_cue(&mut self, cue_ind: Option<usize>) {
         self.cues_selected_cue_ind = cue_ind;
     }
-    pub fn open_cues_popup(&mut self, popup: ui::CuesPopup) {
-        self.cues_popup = popup;
+    pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
+        &self.cues_edit_action
     }
-    pub fn clear_cues_popup(&mut self) {
-        self.cues_popup = ui::CuesPopup::None;
+    pub fn do_cues_edit_action(&mut self, action: ui::CuesEditAction) {
+        self.cues_edit_action = action;
+    }
+    pub fn clear_cues_edit_action(&mut self) {
+        self.cues_edit_action = ui::CuesEditAction::None;
     }
     pub fn connection(&self) -> &Box<dyn board::Connectable> {
         &self.connection
@@ -115,6 +119,9 @@ impl Default for Cue {
 impl Cue {
     fn name(&self) -> &str {
         &self.name
+    }
+    fn edit_name(&mut self) -> &mut String {
+        &mut self.name
     }
     fn dcas(&self) -> &Vec<DcaState> {
         &self.dcas

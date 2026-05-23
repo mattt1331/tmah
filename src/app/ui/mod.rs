@@ -16,13 +16,16 @@ pub enum UiScreen {
 
 /// Whether and what popup is active in the cues screen
 #[derive(Default)]
-pub enum CuesPopup {
+pub enum CuesEditAction {
     #[default]
     None,
     EditChannelNames,
     EditDcaAssign {
         cue_ind: usize,
         dca_ind: usize,
+    },
+    EditCueDesc {
+        cue_ind: usize,
     },
 }
 
@@ -88,19 +91,22 @@ impl State {
 
         ui.horizontal(|ui| {
             if ui.button("Channel names").clicked() {
-                self.open_cues_popup(CuesPopup::EditChannelNames);
+                self.do_cues_edit_action(CuesEditAction::EditChannelNames);
             }
         });
         ui.add_space(10.0);
 
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 30.0;
+        const DESC_WIDTH: f32 = 300.0;
 
         let mut double_clicked_cell: Option<(usize, usize)> = None;
         let num_dcas = self.num_dcas();
         TableBuilder::new(ui)
             // All columns must be "pre-allocated"
-            .columns(Column::auto(), (num_dcas + 1).into())
+            .column(Column::auto()) // Cue
+            .column(Column::initial(DESC_WIDTH)) // Desc
+            .columns(Column::auto(), num_dcas.into()) // DCAs
             .auto_shrink(egui::Vec2b::FALSE)
             .striped(true)
             .sense(egui::Sense::click())
@@ -108,6 +114,9 @@ impl State {
                 header.col(|ui| {
                     ui.heading("Cue");
                 });
+                header.col(|ui| { ui.vertical_centered( |ui| {
+                    ui.heading("Desc");
+                }); });
                 for i in 0..num_dcas {
                     header.col(|ui| {
                         ui.heading(format!("DCA {}", i + 1));
@@ -119,15 +128,40 @@ impl State {
                     row.set_hovered(false); // Otherwise it does an ugly highlight when you mouse over
 
                     let i = row.index();
+
+                    // Selected row
                     if let Some(sel_ind) = self.selected_cue()
                         && sel_ind == i
                     {
                         row.set_selected(true);
                     }
-                    let cue = &self.cues()[i];
+
                     row.col(|ui| {
-                        ui.label(cue.name());
+                        ui.horizontal_centered(|ui| {
+                            ui.label(format!("{i}"));
+                        });
                     });
+                    let desc_response = row.col(|ui| {
+                        let layout = egui::Layout::left_to_right(egui::Align::Center)
+                            .with_main_wrap(true)
+                            .with_cross_justify(true);
+                        ui.with_layout(layout, |ui| {
+                            if let CuesEditAction::EditCueDesc { cue_ind } = *self.cues_edit_action()
+                                && cue_ind == i {
+                                let response = ui.text_edit_singleline(self.cues_mut()[cue_ind].edit_name());
+                                if response.lost_focus() {
+                                    self.clear_cues_edit_action();
+                                }
+                                response.request_focus();
+                            } else {
+                                ui.add(egui::Label::new(self.cues()[i].name()).selectable(false));
+                            }
+                        });
+                    });
+                    if desc_response.1.double_clicked() {
+                        self.do_cues_edit_action(CuesEditAction::EditCueDesc { cue_ind: i })
+                    }
+                    let cue = &self.cues()[i];
                     for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
                         let (_, response) = row.col(|ui| {
                             let dca_name = dca.name(self.channel_names());
@@ -167,8 +201,10 @@ impl State {
                     }
                 })
             });
+
+        // If a DCA was double clicked, edit it's assignment
         if let Some((i, j)) = double_clicked_cell {
-            self.open_cues_popup(CuesPopup::EditDcaAssign {
+            self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
             })
@@ -179,11 +215,11 @@ impl State {
         let ctx = ui.ctx();
         if !ctx.egui_wants_keyboard_input() && ctx.input(|input| input.key_down(egui::Key::Escape))
         {
-            self.clear_cues_popup();
+            self.clear_cues_edit_action();
         }
-        match self.cues_popup {
-            CuesPopup::None => (),
-            CuesPopup::EditChannelNames => {
+        match *self.cues_edit_action() {
+            CuesEditAction::None => (),
+            CuesEditAction::EditChannelNames => {
                 egui::Window::new("Edit Channel Names")
                     .title_bar(false)
                     .show(ui.ctx(), |ui| {
@@ -218,7 +254,7 @@ impl State {
                             })
                     });
             }
-            CuesPopup::EditDcaAssign { cue_ind, dca_ind } => {
+            CuesEditAction::EditDcaAssign { cue_ind, dca_ind } => {
                 egui::Window::new("Edit DCA Assignments")
                     .title_bar(false)
                     .show(ui.ctx(), |ui| {
@@ -287,6 +323,7 @@ impl State {
                         }
                     });
             }
+            CuesEditAction::EditCueDesc { .. } => (), // Not a popup
         }
     }
     /// Draw the UI of the file screen
