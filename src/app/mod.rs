@@ -19,6 +19,11 @@ pub struct State {
     /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
     cues_edit_action: ui::CuesEditAction,
     cues_selected_cue_ind: Option<usize>,
+    // FIXME: Refactor this atrocity.
+    /// An objectively terrible implementation, true, but it's funny. A stack of undo actions. When
+    /// undo is pressed, pop off the last one and run it on `State`. When an undoable action
+    /// occurs, add the undo action to the stack.
+    cues_undo_stack: Vec<Box<dyn FnOnce(&mut State)>>,
     /// The connection selected in the dropdown on the board screen
     connection_ui: board::Connections,
     /// The currently active connection to difference with above
@@ -43,6 +48,7 @@ impl Default for State {
             ui_screen: ui::UiScreen::default(),
             cues_edit_action: ui::CuesEditAction::default(),
             cues_selected_cue_ind: None,
+            cues_undo_stack: Vec::default(),
             connection_ui: board::Connections::default(),
             connection_ui_prev: board::Connections::default(),
         }
@@ -64,6 +70,42 @@ impl State {
     }
     pub fn cues_mut(&mut self) -> &mut Vec<Cue> {
         &mut self.cues
+    }
+    pub fn add_cue(&mut self, cue: Cue, index: usize, no_undo: bool) {
+        let index = std::cmp::min(index, self.cues.len());
+        self.cues.insert(index, cue);
+        if !no_undo {
+            self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: index });
+            self.cues_stack_undo(Box::new(move |state| {
+                state.delete_cue(index, true);
+            }));
+        }
+    }
+    pub fn delete_cue(&mut self, index: usize, no_undo: bool) {
+        if index < self.cues.len() {
+            let removed_cue = self.cues.remove(index);
+            if !no_undo {
+                self.cues_stack_undo(Box::new(move |state| {
+                    state.add_cue(removed_cue, index, true);
+                }));
+            }
+            // Update index
+            if let Some(sel_ind) = self.cues_selected_cue_ind {
+                if sel_ind > 0 {
+                    self.set_selected_cue(Some(sel_ind - 1));
+                } else {
+                    self.set_selected_cue(None);
+                }
+            }
+        }
+    }
+    pub fn cues_stack_undo(&mut self, action: Box<dyn FnOnce(&mut State)>) {
+        self.cues_undo_stack.push(action);
+    }
+    pub fn cues_do_undo(&mut self) {
+        if let Some(action) = self.cues_undo_stack.pop() {
+            action(self);
+        }
     }
     pub fn channel_names(&self) -> &ChannelNames {
         &self.ch_names
@@ -90,7 +132,7 @@ impl State {
     }
     pub fn fire_next_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
-            self.set_selected_cue(Some(ind+1));
+            self.set_selected_cue(Some(ind + 1));
             self.fire_selected_cue();
         } else {
             self.set_selected_cue(Some(0));
@@ -121,7 +163,7 @@ pub struct Cue {
 impl Default for Cue {
     fn default() -> Self {
         Cue {
-            name: "def cue name".to_string(),
+            name: "".to_string(),
             dcas: vec![
                 DcaState::default(),
                 DcaState::default(),

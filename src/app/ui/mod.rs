@@ -14,7 +14,8 @@ pub enum UiScreen {
     Board,
 }
 
-/// Whether and what popup is active in the cues screen
+/// Whether and what editing action is the ui doing in the cues screen. For instance, the edit DCA
+/// assignment popup or changing a cue description.
 #[derive(Default)]
 pub enum CuesEditAction {
     #[default]
@@ -90,12 +91,46 @@ impl State {
         self.cues_ui_popup(ui);
 
         ui.horizontal(|ui| {
+            if ui.button("Add cue at bot.").clicked() {
+                self.add_cue(super::Cue::default(), self.cues().len(), false);
+            }
+            if ui.button("Undo").clicked() {
+                self.cues_do_undo();
+            }
             if ui.button("Channel names").clicked() {
                 self.do_cues_edit_action(CuesEditAction::EditChannelNames);
             }
         });
         ui.add_space(10.0);
 
+        // Draw the grid with cues and dcas
+        let double_clicked_cell = self.cues_table(ui);
+
+        // If a DCA was double clicked, edit its assignment
+        if let Some((i, j)) = double_clicked_cell {
+            self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
+                cue_ind: i,
+                dca_ind: j,
+            })
+        }
+
+        // If del key pressed, delete selected cue
+        if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete)) {
+            if let Some(index) = self.selected_cue() {
+                self.delete_cue(index, false);
+            }
+        }
+
+        // Space to GO
+        if ui.ctx().input(|input| input.key_pressed(egui::Key::Space))
+            && matches!(self.cues_edit_action(), CuesEditAction::None)
+        {
+            self.fire_next_cue();
+        }
+    }
+    /// Draw the cues table and stuff. Returns if and which dca assignment cell was double-clicked
+    /// as `(cue_ind, dca_ind)`.
+    fn cues_table(&mut self, ui: &mut egui::Ui) -> Option<(usize, usize)> {
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 30.0;
         const DESC_WIDTH: f32 = 300.0;
@@ -180,7 +215,9 @@ impl State {
                                     .with_cross_align(egui::Align::Center);
                                 ui.with_layout(layout, |ui| {
                                     ui.add(
-                                        egui::Label::new(dca.name(self.channel_names()).to_string())
+                                        egui::Label::new(
+                                            dca.name(self.channel_names()).to_string(),
+                                        )
                                         .selectable(false),
                                     );
                                 });
@@ -208,20 +245,7 @@ impl State {
                     }
                 })
             });
-
-        // If a DCA was double clicked, edit it's assignment
-        if let Some((i, j)) = double_clicked_cell {
-            self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
-                cue_ind: i,
-                dca_ind: j,
-            })
-        }
-
-        if ui.ctx().input(|input| input.key_pressed(egui::Key::Space))
-            && matches!(self.cues_edit_action(), CuesEditAction::None)
-        {
-            self.fire_next_cue();
-        }
+        return double_clicked_cell;
     }
     /// Draw the popup, if any, in the cues screen
     fn cues_ui_popup(&mut self, ui: &mut egui::Ui) {
