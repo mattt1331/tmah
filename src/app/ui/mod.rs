@@ -311,7 +311,7 @@ impl State {
                             let dca_name = self.cues_mut()[cue_ind].dcas_mut()[dca_ind].edit_name();
                             if let Some(name) = dca_name {
                                 ui.text_edit_singleline(name);
-                                if !name.is_empty() {
+                                if name.is_empty() {
                                     *dca_name = None;
                                 }
                             } else {
