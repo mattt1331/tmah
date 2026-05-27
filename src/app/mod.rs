@@ -99,6 +99,26 @@ impl State {
             }
         }
     }
+    /// Move the cue at `start_index` to `end_index`. If `end_index` is greater than or equal to
+    /// the number of cues, the cue will be moved to the end of the list.
+    pub fn renumber_cue(&mut self, start_index: usize, end_index: usize, no_undo: bool) {
+        // Check that start_index is in range
+        if start_index > self.cues.len() - 1 {
+            return;
+        }
+        // Clamp end_index to be range
+        let end_index = std::cmp::min(end_index, self.cues.len() - 1);
+        if end_index == start_index {
+            return;
+        }
+        let cue = self.cues.remove(start_index);
+        self.cues.insert(end_index, cue);
+        if !no_undo {
+            self.cues_stack_undo(Box::new(move |state| {
+                state.renumber_cue(end_index, start_index, true);
+            }));
+        }
+    }
     pub fn cues_stack_undo(&mut self, action: Box<dyn FnOnce(&mut State)>) {
         self.cues_undo_stack.push(action);
     }
@@ -112,6 +132,18 @@ impl State {
     }
     pub fn channel_names_mut(&mut self) -> &mut ChannelNames {
         &mut self.ch_names
+    }
+    pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
+        &self.cues_edit_action
+    }
+    pub fn cues_edit_action_mut(&mut self) -> &mut ui::CuesEditAction {
+        &mut self.cues_edit_action
+    }
+    pub fn do_cues_edit_action(&mut self, action: ui::CuesEditAction) {
+        self.cues_edit_action = action;
+    }
+    pub fn clear_cues_edit_action(&mut self) {
+        self.cues_edit_action = ui::CuesEditAction::None;
     }
     pub fn selected_cue(&self) -> Option<usize> {
         self.cues_selected_cue_ind
@@ -138,15 +170,6 @@ impl State {
             self.set_selected_cue(Some(0));
             self.fire_selected_cue();
         }
-    }
-    pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
-        &self.cues_edit_action
-    }
-    pub fn do_cues_edit_action(&mut self, action: ui::CuesEditAction) {
-        self.cues_edit_action = action;
-    }
-    pub fn clear_cues_edit_action(&mut self) {
-        self.cues_edit_action = ui::CuesEditAction::None;
     }
     pub fn connection(&self) -> &Box<dyn board::Connectable> {
         &self.connection

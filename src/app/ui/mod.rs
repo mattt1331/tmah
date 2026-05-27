@@ -28,6 +28,10 @@ pub enum CuesEditAction {
     EditCueDesc {
         cue_ind: usize,
     },
+    RenumberCue {
+        cue_ind: usize,
+        input_text: String,
+    },
 }
 
 impl eframe::App for State {
@@ -175,11 +179,35 @@ impl State {
                     }
 
                     // Cue
-                    row.col(|ui| {
-                        ui.horizontal_centered(|ui| {
-                            ui.label(format!("{i}"));
-                        });
+                    let cue_response = row.col(|ui| {
+                        if let CuesEditAction::RenumberCue {
+                            cue_ind,
+                            input_text,
+                        } = self.cues_edit_action_mut()
+                            && *cue_ind == i
+                        {
+                            let response = ui.text_edit_singleline(input_text);
+                            if response.lost_focus() {
+                                let input: Result<usize, _> = input_text.parse();
+                                if let Ok(end_ind) = input {
+                                    let cue_ind = (*cue_ind).clone();
+                                    self.renumber_cue(cue_ind, end_ind, false);
+                                }
+                                self.clear_cues_edit_action();
+                            }
+                            response.request_focus();
+                        } else {
+                            ui.horizontal_centered(|ui| {
+                                ui.add(egui::Label::new(i.to_string()).selectable(false));
+                            });
+                        }
                     });
+                    if cue_response.1.double_clicked() {
+                        self.do_cues_edit_action(CuesEditAction::RenumberCue {
+                            cue_ind: i,
+                            input_text: i.to_string(),
+                        })
+                    }
                     // Desc
                     let desc_response = row.col(|ui| {
                         let layout = egui::Layout::left_to_right(egui::Align::Center)
@@ -357,7 +385,7 @@ impl State {
                         }
                     });
             }
-            CuesEditAction::EditCueDesc { .. } => (), // Not a popup
+            CuesEditAction::EditCueDesc { .. } | CuesEditAction::RenumberCue { .. } => (), // Not a popup
         }
     }
     /// Draw the UI of the file screen
