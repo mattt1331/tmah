@@ -289,6 +289,19 @@ impl State {
                     .title_bar(false)
                     .show(ui.ctx(), |ui| {
                         ui.heading("Edit channel names");
+                        ui.add_space(10.0);
+                        // Button to send channel names
+                        if ui
+                            .add_enabled(
+                                self.connection().connected(),
+                                egui::Button::new("Send channel names to board"),
+                            )
+                            .clicked()
+                        {
+                            self.fire_channel_names();
+                        }
+                        ui.add_space(10.0);
+                        // Table of editable channel names
                         TableBuilder::new(ui)
                             .columns(Column::auto(), 2)
                             .striped(true)

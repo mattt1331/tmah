@@ -1,6 +1,6 @@
 //! Contains implementation for connecting to the Yamaha M7CL over MIDI
 
-use crate::app::Cue;
+use crate::app::{ChannelNames, Cue};
 use eframe::egui::{self, Color32, RichText, Ui};
 use midir::{self, MidiOutput, MidiOutputConnection, MidiOutputPort};
 
@@ -79,6 +79,15 @@ impl super::Connectable for M7CLMidi {
             self.fire_cue_diff(cue, &prev_cue);
         } else {
             self.fire_full_cue(cue);
+        }
+    }
+    fn fire_channel_names(&mut self, names: &ChannelNames) {
+        if let ConnectionState::Connected(..) = self.conn {
+            for (ch_ind, name) in names.iterator() {
+                self.send_channel_name(*ch_ind, name);
+            }
+        } else {
+            log::error!("`fire_channel_names` called but we are not connected");
         }
     }
     fn ui(&mut self, ui: &mut Ui) {

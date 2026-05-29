@@ -25,6 +25,8 @@ pub trait Connectable {
 
     /// Fire the provided cue
     fn fire_cue(&mut self, cue: &super::Cue);
+    /// Set the channel names on the board to match the specified names
+    fn fire_channel_names(&mut self, names: &super::ChannelNames);
 }
 
 /// A list of all of our boards. Use `Connenctions::construct` to pick one from the list.
@@ -70,6 +72,9 @@ impl Connectable for NoConnection {
     }
     fn fire_cue(&mut self, _cue: &super::Cue) {
         log::warn!("Cue was fired with no connection")
+    }
+    fn fire_channel_names(&mut self, _: &super::ChannelNames) {
+        log::warn!("Channel names fired with no connection")
     }
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
         ui.horizontal(|ui| {

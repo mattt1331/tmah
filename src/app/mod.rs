@@ -171,6 +171,9 @@ impl State {
             self.fire_selected_cue();
         }
     }
+    pub fn fire_channel_names(&mut self) {
+        self.connection.fire_channel_names(&self.ch_names);
+    }
     pub fn connection(&self) -> &Box<dyn board::Connectable> {
         &self.connection
     }
@@ -301,5 +304,9 @@ impl ChannelNames {
     /// Returns the name of the channel, if set
     fn get_name(&self, ch: &Channel) -> Option<String> {
         self.names.get(&ch.index()).map(|name| name.to_string())
+    }
+    /// Returns an iterator over (ch_ind, name) for the channels whose names are set.
+    fn iterator(&self) -> std::collections::hash_map::Iter<'_, u8, String> {
+        self.names.iter()
     }
 }
