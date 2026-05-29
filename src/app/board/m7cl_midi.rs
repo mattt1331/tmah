@@ -314,25 +314,31 @@ impl M7CLMidi {
             0x63,
             // NRPN Parameter MSB value
             param_msb,
+        ]);
+        self.send(&[
             // Control change + channel
             0b1011_0000 | MIDI_CHANNEL_IND,
             // NRPN Parameter LSB
             0x62,
             // NRPN Parameter LSB value
             param_lsb,
+        ]);
+        self.send(&[
             // Control change + channel
             0b1011_0000 | MIDI_CHANNEL_IND,
             // NRPN Data MSB
             0x06,
             // NRPN Data MSB value
             val_msb,
+        ]);
+        self.send(&[
             // Control change + channel
             0b1011_0000 | MIDI_CHANNEL_IND,
             // NRPN Data LSB
             0x26,
             // NRPN Data LSB value
             val_lsb,
-        ])
+        ]);
     }
     /// Send the midi sysex message to change parameter as given
     /// Note: takes normal, not midi, bytes
