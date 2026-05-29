@@ -247,6 +247,52 @@ impl M7CLMidi {
             [0x00, 0x00, 0x00, 0x00, data],
         );
     }
+    /// Send the messages to set the name of the given DCA to the given value. The name must be
+    /// ASCII and can be at most eight characters.
+    fn send_dca_name(&mut self, dca_ind: u8, name: &str) {
+        let name = name.as_bytes();
+        let data_1: [u8; 5] = [
+            0x00,
+            *name.get(0).unwrap_or(&0x00),
+            *name.get(1).unwrap_or(&0x00),
+            *name.get(2).unwrap_or(&0x00),
+            *name.get(3).unwrap_or(&0x00),
+        ];
+        let data_2: [u8; 5] = [
+            0x00,
+            *name.get(4).unwrap_or(&0x00),
+            *name.get(5).unwrap_or(&0x00),
+            *name.get(6).unwrap_or(&0x00),
+            *name.get(7).unwrap_or(&0x00),
+        ];
+        // kDCAName kNameShort1
+        self.send_prm_sysex(0x007b, 0x0000, dca_ind.into(), data_1);
+        // kDCAName kNameShort2
+        self.send_prm_sysex(0x007b, 0x0001, dca_ind.into(), data_2);
+    }
+    /// Send the messages to set the name of the given channel to the given value. The name must be
+    /// ASCII and can be at most eight characters.
+    fn send_channel_name(&mut self, channel_ind: u8, name: &str) {
+        let name = name.as_bytes();
+        let data_1: [u8; 5] = [
+            0x00,
+            *name.get(0).unwrap_or(&0x00),
+            *name.get(1).unwrap_or(&0x00),
+            *name.get(2).unwrap_or(&0x00),
+            *name.get(3).unwrap_or(&0x00),
+        ];
+        let data_2: [u8; 5] = [
+            0x00,
+            *name.get(4).unwrap_or(&0x00),
+            *name.get(5).unwrap_or(&0x00),
+            *name.get(6).unwrap_or(&0x00),
+            *name.get(7).unwrap_or(&0x00),
+        ];
+        // kDCAName kNameShort1
+        self.send_prm_sysex(0x0113, 0x0000, channel_ind.into(), data_1);
+        // kDCAName kNameShort2
+        self.send_prm_sysex(0x0113, 0x0001, channel_ind.into(), data_2);
+    }
     /// Send the sequence of midi messages which corresponds to the given NRPN control change
     /// Note: takes normal, not midi, bytes
     fn send_nrpn(&mut self, param: u16, val: u16) {
