@@ -23,12 +23,14 @@ pub struct State {
     /// An objectively terrible implementation, true, but it's funny. A stack of undo actions. When
     /// undo is pressed, pop off the last one and run it on `State`. When an undoable action
     /// occurs, add the undo action to the stack.
-    cues_undo_stack: Vec<Box<dyn FnOnce(&mut State)>>,
+    cues_undo_stack: Vec<Box<UndoAction>>,
     /// The connection selected in the dropdown on the board screen
     connection_ui: board::Connections,
     /// The currently active connection to difference with above
     connection_ui_prev: board::Connections,
 }
+
+type UndoAction = dyn FnOnce(&mut State);
 
 impl Default for State {
     fn default() -> Self {
@@ -119,7 +121,7 @@ impl State {
             }));
         }
     }
-    pub fn cues_stack_undo(&mut self, action: Box<dyn FnOnce(&mut State)>) {
+    pub fn cues_stack_undo(&mut self, action: Box<UndoAction>) {
         self.cues_undo_stack.push(action);
     }
     pub fn cues_do_undo(&mut self) {
@@ -293,10 +295,6 @@ pub struct ChannelNames {
     names: std::collections::HashMap<u8, String>,
 }
 impl ChannelNames {
-    /// Set the name of the given channel
-    fn set_name(&mut self, ch: &Channel, name: String) {
-        self.names.insert(ch.index(), name);
-    }
     /// Returns a mutable reference to the given channel's name
     fn edit_name(&mut self, ch: &Channel) -> &mut String {
         self.names.entry(ch.index()).or_insert("".to_string())

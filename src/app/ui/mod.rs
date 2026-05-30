@@ -119,10 +119,10 @@ impl State {
         }
 
         // If del key pressed, delete selected cue
-        if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete)) {
-            if let Some(index) = self.selected_cue() {
-                self.delete_cue(index, false);
-            }
+        if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
+            && let Some(index) = self.selected_cue()
+        {
+            self.delete_cue(index, false);
         }
 
         // Space to GO
@@ -190,7 +190,7 @@ impl State {
                             if response.lost_focus() {
                                 let input: Result<usize, _> = input_text.parse();
                                 if let Ok(end_ind) = input {
-                                    let cue_ind = (*cue_ind).clone();
+                                    let cue_ind = *cue_ind;
                                     self.renumber_cue(cue_ind, end_ind, false);
                                 }
                                 self.clear_cues_edit_action();
@@ -273,7 +273,7 @@ impl State {
                     }
                 })
             });
-        return double_clicked_cell;
+        double_clicked_cell
     }
     /// Draw the popup, if any, in the cues screen
     fn cues_ui_popup(&mut self, ui: &mut egui::Ui) {

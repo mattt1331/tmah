@@ -262,7 +262,7 @@ impl M7CLMidi {
         let name = name.as_bytes();
         let data_1: [u8; 5] = [
             0x00,
-            *name.get(0).unwrap_or(&0x00),
+            *name.first().unwrap_or(&0x00),
             *name.get(1).unwrap_or(&0x00),
             *name.get(2).unwrap_or(&0x00),
             *name.get(3).unwrap_or(&0x00),
@@ -285,7 +285,7 @@ impl M7CLMidi {
         let name = name.as_bytes();
         let data_1: [u8; 5] = [
             0x00,
-            *name.get(0).unwrap_or(&0x00),
+            *name.first().unwrap_or(&0x00),
             *name.get(1).unwrap_or(&0x00),
             *name.get(2).unwrap_or(&0x00),
             *name.get(3).unwrap_or(&0x00),

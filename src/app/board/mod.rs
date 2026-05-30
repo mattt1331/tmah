@@ -131,6 +131,7 @@ impl Channel {
     }
     /// Returns a `Channel` with the specified number (eg `num` = 1 -> Ch1). Returns None if `num` is
     /// zero.
+    #[allow(dead_code)] // for completeness
     pub fn from_number(num: u8) -> Option<Channel> {
         if num == 0 {
             None
