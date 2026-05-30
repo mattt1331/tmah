@@ -18,8 +18,8 @@ const MIDI_CHANNEL_IND: u8 = 0;
 /// A connection over MIDI to an M7CL.
 pub struct M7CLMidi {
     conn: ConnectionState,
-    /// If this is true, logic will assume that no one else touches the board appart from this.
-    /// This lets it send fewer commands and is a hack until we implement recieving state update
+    /// If this is true, logic will assume that no one else touches the board apart from this.
+    /// This lets it send fewer commands and is a hack until we implement receiving state update
     /// messages from the board.
     // TODO: implement receiving state update messages from the board
     no_touchy: bool,

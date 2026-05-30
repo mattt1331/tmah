@@ -17,6 +17,11 @@
           rustc
           rustfmt
           clippy
+          lld
+          typos # spellcheck
+
+          # For web. Glues wasm to html
+          trunk
 
           # Needed to point whatever this is at alsa-lib
           pkg-config

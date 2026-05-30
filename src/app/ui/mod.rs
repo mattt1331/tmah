@@ -89,7 +89,7 @@ impl eframe::App for State {
 
 /// UI
 impl State {
-    // TODO: Extract stuff into seperate functions
+    // TODO: Extract stuff into separate functions
     /// Draw the UI of the area that shows the cues and DCAs
     fn cues_ui(&mut self, ui: &mut egui::Ui) {
         self.cues_ui_popup(ui);

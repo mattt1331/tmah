@@ -13,7 +13,9 @@ env_logger = "0.11.10"
 # MIDI
 midir = "0.11.0"
 # De/Serialization
-serde = "1.0.228"
+serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.2"
+# Web
+wasm-bindgen-futures = "0.4.72"
 # Util
 take_mut = "0.2.2"
