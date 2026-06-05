@@ -403,13 +403,19 @@ impl State {
     }
     /// Draw the UI of the file screen
     fn file_ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui.button("save").clicked() {
-                self.brick_save();
+        if self.file_is_idle() {
+            ui.horizontal(|ui| {
+                if ui.button("Save as").clicked() {
+                    self.save_as();
+                }
+                if ui.button("Load").clicked() {
+                    self.load();
+                }
+            });
+        } else {
+            if ui.button("Cancel").clicked() {
+                self.cancel_file_dialog();
             }
-            if ui.button("load").clicked() {
-                self.brick_load();
-            }
-        });
+        }
     }
 }

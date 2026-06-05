@@ -30,12 +30,16 @@
           libxkbcommon
           libGL
           fontconfig
+          dbus
 
           # Wayland libraries
           wayland
 
           # MIDI libraries
           alsa-lib
+
+          # Fallback file picker for linux
+          zenity
 				];
 
         LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}";

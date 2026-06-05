@@ -23,7 +23,7 @@ fn main() -> eframe::Result {
 // When compiling for web
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    use eframe::wasm_bindgen::JsCast /*as _*/;
+    use eframe::wasm_bindgen::JsCast; /*as _*/
     use eframe::web_sys;
 
     // Enable logging to the web console

@@ -14,8 +14,11 @@ env_logger = "0.11.10"
 midir = "0.11.0"
 # De/Serialization
 serde = { version = "1.0.228", features = ["derive"] }
-toml = "1.1.2"
+ron = "0.12.1"
+# File dialog
+rfd = "0.17.2"
 # Web
 wasm-bindgen-futures = "0.4.72"
 # Util
-take_mut = "0.2.2"
+take_mut = "0.2.2" # temporarily take ownership from behind an &mut
+pollster = "0.4.0" # un-async a future

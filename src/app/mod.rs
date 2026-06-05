@@ -14,6 +14,9 @@ pub struct State {
     ch_names: ChannelNames,
     connection: Box<dyn board::Connectable>,
 
+    /// State related to loading show files
+    file_state: file::FileState,
+
     // UI state etc
     ui_screen: ui::UiScreen,
     /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
@@ -46,6 +49,8 @@ impl Default for State {
             ],
             ch_names: ChannelNames::default(),
             connection: Box::new(board::NoConnection::new()),
+
+            file_state: file::FileState::default(),
 
             ui_screen: ui::UiScreen::default(),
             cues_edit_action: ui::CuesEditAction::default(),
