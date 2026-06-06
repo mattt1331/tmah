@@ -2,7 +2,7 @@
 
 // Types used by this module to represent data common to all boards
 mod data;
-pub use data::{BoardEdit, Channel, Decibels};
+pub use data::{BoardEdit, Channel, Dca, Decibels};
 
 mod m7cl_midi;
 

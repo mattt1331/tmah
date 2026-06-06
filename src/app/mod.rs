@@ -7,6 +7,8 @@ mod ui;
 pub use board::Decibels;
 use board::{Channel, Connectable};
 
+use std::collections::HashSet;
+
 /// Top level of program state
 pub struct State {
     // Actual program state
@@ -236,7 +238,7 @@ impl Cue {
 /// The state of a DCA, which can be realized by calling a cue
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 struct DcaState {
-    assigned: Vec<Channel>,
+    assigned: HashSet<Channel>,
     name: Option<String>,
     level: Option<Decibels>,
 }
@@ -269,27 +271,52 @@ impl DcaState {
     fn edit_name(&mut self) -> &mut Option<String> {
         &mut self.name
     }
-    fn assigned(&self) -> &Vec<Channel> {
+    fn assigned(&self) -> &HashSet<Channel> {
         &self.assigned
     }
     /// Assigns the given channel to this DCA
     fn assign(&mut self, ch: Channel) {
-        if !self.assigned.contains(&ch) {
-            self.assigned.push(ch);
-            self.assigned.sort();
-        }
+        self.assigned.insert(ch);
     }
     /// Unassigns the given channel from this DCA
     fn unassign(&mut self, ch: Channel) {
-        let mut ind = None;
-        for (i, channel) in self.assigned.iter().enumerate() {
-            if *channel == ch {
-                ind = Some(i);
-            }
+        self.assigned.remove(&ch);
+    }
+    /// Find the differences between the two given `DcaState`s. The differences will be given as
+    /// board edits so that they can be applied to go from `prev` to `next`. The diff includes
+    /// mute/unmute operations so that channels which are unassigned are muted and channels which
+    /// are newly assigned are unmuted.
+    fn diff(prev: DcaState, next: DcaState, dca: board::Dca) -> Vec<board::BoardEdit> {
+        let unassigned = prev.assigned.difference(&next.assigned);
+        let assigned = next.assigned.difference(&prev.assigned);
+        let mut diff = Vec::new();
+        for ch in unassigned {
+            diff.push(board::BoardEdit::ChannelDcaAssign(
+                ch.clone(),
+                dca.clone(),
+                false,
+            ));
+            diff.push(board::BoardEdit::ChannelMute(ch.clone(), true));
         }
-        if let Some(ind) = ind {
-            self.assigned.remove(ind);
+        for ch in assigned {
+            diff.push(board::BoardEdit::ChannelDcaAssign(
+                ch.clone(),
+                dca.clone(),
+                true,
+            ));
+            diff.push(board::BoardEdit::ChannelMute(ch.clone(), false));
         }
+        if prev.name != next.name
+            && let Some(name) = next.name
+        {
+            diff.push(board::BoardEdit::DcaName(dca.clone(), name.clone()));
+        }
+        if prev.level != next.level
+            && let Some(level) = next.level
+        {
+            diff.push(board::BoardEdit::DcaLevel(dca.clone(), level));
+        }
+        diff
     }
 }
 

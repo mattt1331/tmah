@@ -1,7 +1,7 @@
 //! Contains types used by `mod board` to represent data common to all boards
 
 /// Represents a channel
-#[derive(Clone, PartialEq, PartialOrd, Ord, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, PartialOrd, Ord, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
     index: u8,
 }
@@ -31,6 +31,7 @@ impl Channel {
     }
 }
 
+#[derive(Clone)]
 /// Represents a DCA
 pub struct Dca {
     index: u8,
