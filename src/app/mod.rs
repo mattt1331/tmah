@@ -4,7 +4,7 @@ mod board;
 mod file;
 mod ui;
 
-use crate::dB;
+pub use board::Decibels;
 use board::{Channel, Connectable};
 
 /// Top level of program state
@@ -238,7 +238,7 @@ impl Cue {
 struct DcaState {
     assigned: Vec<Channel>,
     name: Option<String>,
-    level: Option<dB>,
+    level: Option<Decibels>,
 }
 
 impl DcaState {

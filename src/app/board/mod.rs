@@ -1,5 +1,9 @@
 //! Contains interfaces and implementations for each board
 
+// Types used by this module to represent data common to all boards
+mod data;
+pub use data::{BoardEdit, Channel, Decibels};
+
 mod m7cl_midi;
 
 /// A generic connection. Implemented by each board
@@ -115,36 +119,5 @@ impl Connectable for NoConnection {
                 }
             }
         });
-    }
-}
-
-/// Represents a channel, which can be assigned to a DCA
-#[derive(Clone, PartialEq, PartialOrd, Ord, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Channel {
-    index: u8,
-}
-
-impl Channel {
-    /// Returns a `Channel` with the specified index (eg `ind` = 0 -> Ch1)
-    pub fn from_index(ind: u8) -> Self {
-        Channel { index: ind }
-    }
-    /// Returns a `Channel` with the specified number (eg `num` = 1 -> Ch1). Returns None if `num` is
-    /// zero.
-    #[allow(dead_code)] // for completeness
-    pub fn from_number(num: u8) -> Option<Channel> {
-        if num == 0 {
-            None
-        } else {
-            Some(Channel { index: num - 1 })
-        }
-    }
-    /// Returns the zero-indexed index of the channel (eg Ch1 returns 0)
-    pub fn index(&self) -> u8 {
-        self.index
-    }
-    /// Returns the number of the channel (eg Ch1 returns 1)
-    pub fn number(&self) -> u8 {
-        self.index + 1
     }
 }

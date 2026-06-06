@@ -1,8 +1,6 @@
 mod app;
-mod util;
 
-pub use util::dB;
-
+pub use app::Decibels;
 use app::State;
 
 // When compiling natively
