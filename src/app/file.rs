@@ -10,12 +10,13 @@ use spawn_future_thread as future_go;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local as future_go;
 
-use super::{ChannelNames, Cue, State};
+use super::{ChannelNames, Cue, CueNumber, State};
+use std::collections::BTreeMap;
 
 /// Data saved in the show file
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct FileData {
-    cues: Vec<Cue>,
+    cues: BTreeMap<CueNumber, Cue>,
     channel_names: ChannelNames, // TODO: connections serialization
 }
 

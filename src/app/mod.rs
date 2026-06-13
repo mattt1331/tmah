@@ -7,12 +7,12 @@ mod ui;
 pub use board::Decibels;
 use board::{Channel, Connectable};
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Top level of program state
 pub struct State {
     // Actual program state
-    cues: Vec<Cue>,
+    cues: BTreeMap<CueNumber, Cue>,
     ch_names: ChannelNames,
     connection: Box<dyn board::Connectable>,
 
@@ -40,15 +40,7 @@ type UndoAction = dyn FnOnce(&mut State);
 impl Default for State {
     fn default() -> Self {
         State {
-            cues: vec![
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-                Cue::default(),
-            ],
+            cues: BTreeMap::new(),
             ch_names: ChannelNames::default(),
             connection: Box::new(board::NoConnection::new()),
 
@@ -74,58 +66,63 @@ impl State {
     pub fn num_channels(&self) -> u8 {
         self.connection.num_channels()
     }
-    pub fn cues(&self) -> &Vec<Cue> {
+    pub fn cues(&self) -> &BTreeMap<CueNumber, Cue> {
         &self.cues
     }
-    pub fn cues_mut(&mut self) -> &mut Vec<Cue> {
+    pub fn cues_mut(&mut self) -> &mut BTreeMap<CueNumber, Cue> {
         &mut self.cues
     }
-    pub fn add_cue(&mut self, cue: Cue, index: usize, no_undo: bool) {
-        let index = std::cmp::min(index, self.cues.len());
-        self.cues.insert(index, cue);
-        if !no_undo {
-            self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: index });
-            self.cues_stack_undo(Box::new(move |state| {
-                state.delete_cue(index, true);
-            }));
+    pub fn add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
+        // Check that there isn't already a cue at this number
+        if matches!(self.cues.get(&number), Some(_)) {
+            log::warn!("Did not insert cue because this number is already occupied");
+            return;
         }
-    }
-    pub fn delete_cue(&mut self, index: usize, no_undo: bool) {
-        if index < self.cues.len() {
-            let removed_cue = self.cues.remove(index);
-            if !no_undo {
+        self.cues.insert(number.clone(), cue);
+        if !no_undo {
+            if let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
+                self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: cue_ind});
                 self.cues_stack_undo(Box::new(move |state| {
-                    state.add_cue(removed_cue, index, true);
+                    state.delete_cue(&number, true);
                 }));
             }
-            // Update index
-            if let Some(sel_ind) = self.cues_selected_cue_ind {
-                if sel_ind > 0 {
-                    self.set_selected_cue(Some(sel_ind - 1));
-                } else {
-                    self.set_selected_cue(None);
-                }
+        }
+    }
+    pub fn delete_cue(&mut self, number: &CueNumber, no_undo: bool) {
+        let removed_cue = self.cues.remove(number);
+        if !no_undo && let Some(removed_cue) = removed_cue {
+            let number = number.clone();
+            self.cues_stack_undo(Box::new(move |state| {
+                state.add_cue(removed_cue, number, true);
+            }));
+        }
+        // Update index
+        if let Some(sel_ind) = self.cues_selected_cue_ind {
+            if sel_ind > 0 {
+                self.set_selected_cue(Some(sel_ind - 1));
+            } else {
+                self.set_selected_cue(None);
             }
         }
     }
-    /// Move the cue at `start_index` to `end_index`. If `end_index` is greater than or equal to
-    /// the number of cues, the cue will be moved to the end of the list.
-    pub fn renumber_cue(&mut self, start_index: usize, end_index: usize, no_undo: bool) {
-        // Check that start_index is in range
-        if start_index > self.cues.len() - 1 {
-            return;
-        }
-        // Clamp end_index to be range
-        let end_index = std::cmp::min(end_index, self.cues.len() - 1);
-        if end_index == start_index {
-            return;
-        }
-        let cue = self.cues.remove(start_index);
-        self.cues.insert(end_index, cue);
-        if !no_undo {
-            self.cues_stack_undo(Box::new(move |state| {
-                state.renumber_cue(end_index, start_index, true);
-            }));
+    /// Move the cue at `start_index` to `end_number`.
+    pub fn renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
+        // Check that there isn't already a cue with `end_number`
+        if matches!(self.cues.get(&end_num), None) {
+            // Get the cue we are renumbering
+            if let Some(cue) = self.cues.remove(&start_num) {
+                    self.cues.insert(end_num.clone(), cue);
+
+                    if !no_undo {
+                        self.cues_stack_undo(Box::new(move |state| {
+                            state.renumber_cue(end_num, start_num, true);
+                        }));
+                    }
+            } else {
+                log::warn!("Could not renumber cue because getting the cue failed");
+            }
+        } else {
+            log::warn!("Could not renumber cue because new number already exists");
         }
     }
     pub fn cues_stack_undo(&mut self, action: Box<UndoAction>) {
@@ -168,7 +165,14 @@ impl State {
     }
     pub fn fire_selected_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
-            self.connection.fire_cue(&self.cues[ind]);
+            if let Some(cue) = self.cues().values().nth(ind) {
+                // FIX: There has to be a better way to do this. Maybe swtich to selected cue
+                // number, not index?
+                let cue = cue.clone();
+                self.connection.fire_cue(&cue);
+            } else {
+                log::error!("Fire cue function called but the selected cue at index {ind} could not be found");
+            }
         }
     }
     pub fn fire_next_cue(&mut self) {
@@ -185,6 +189,53 @@ impl State {
     }
     pub fn connection(&self) -> &Box<dyn board::Connectable> {
         &self.connection
+    }
+}
+
+#[derive(Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+/// Represents a cue's number. Cues can optionally be nested up to three levels deep. However, the
+/// second two levels are optional. Logically, if the third level is present the second one must be
+/// as well. Note that the numbers should be displayed as one plus their value. Thus, (0, None) is
+/// cue 1, and (0, Some((0, None))) is cue 1.1.
+pub struct CueNumber(usize, Option<(usize, Option<usize>)>);
+impl CueNumber {
+    /// Try to parse a `CueNumber` from an `&str` inputted by the user
+    fn parse(input: &str) -> Result<CueNumber, ()> {
+        let mut input = input
+            .split(['.', '-', ' '])
+            .filter_map(|num| num.parse().ok());
+        match input.next() {
+            Some(first_num) => match input.next() {
+                Some(second_num) => Ok(CueNumber(first_num, Some((second_num, input.next())))),
+                None => Ok(CueNumber(first_num, None)),
+            }
+            None => Err(()),
+        }
+    }
+    /// Returns the number after this one, incrementing the lowest level of numbers that has been
+    /// set
+    fn increment_lowest(&mut self) {
+        if let Some((ref mut b, mut c)) = self.1 {
+            if let Some(ref mut c) = c {
+                *c += 1;
+            } else {
+                *b += 1;
+            }
+        } else {
+            self.0 += 1;
+        }
+    }
+}
+impl std::fmt::Display for CueNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self.1 {
+            Some((b, c)) => match c {
+                Some(c) => write!(f, "{}.{}.{}", self.0, b, c),
+                None => write!(f, "{}.{}", self.0, b),
+            }
+            None => write!(f, "{}", self.0),
+        }?;
+        Ok(())
     }
 }
 

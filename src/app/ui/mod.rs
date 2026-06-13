@@ -1,7 +1,7 @@
 //! Contains all the UI
 
 use super::board;
-use super::{Channel, State};
+use super::{Channel, State, CueNumber};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
 
@@ -96,7 +96,11 @@ impl State {
 
         ui.horizontal(|ui| {
             if ui.button("Add cue at bot.").clicked() {
-                self.add_cue(super::Cue::default(), self.cues().len(), false);
+                let mut new_bottom_num = self.cues().keys().last()
+                    .map(|num| num.clone())
+                    .unwrap_or_default();
+                new_bottom_num.increment_lowest();
+                self.add_cue(super::Cue::default(), new_bottom_num, false);
             }
             if ui.button("Undo").clicked() {
                 self.cues_do_undo();
@@ -115,14 +119,16 @@ impl State {
             self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
-            })
+            });
         }
 
         // If del key pressed, delete selected cue
         if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
             && let Some(index) = self.selected_cue()
+            && let Some(cue_num) = self.cues().keys().nth(index)
         {
-            self.delete_cue(index, false);
+            let cue_num = cue_num.clone();
+            self.delete_cue(&cue_num, false);
         }
 
         // Space to GO
@@ -187,25 +193,29 @@ impl State {
                             && *cue_ind == i
                         {
                             let response = ui.text_edit_singleline(input_text);
+                            // If finished editing cue number
                             if response.lost_focus() {
-                                let input: Result<usize, _> = input_text.parse();
-                                if let Ok(end_ind) = input {
-                                    let cue_ind = *cue_ind;
-                                    self.renumber_cue(cue_ind, end_ind, false);
+                                let input: Result<CueNumber, _> = CueNumber::parse(input_text);
+                                let cue_ind = *cue_ind; // copying the value because borrow checker
+                                if let Ok(new_cue_num) = input
+                                    && let Some(current_cue_num) = self.cues().keys().nth(cue_ind) { 
+                                        self.renumber_cue((*current_cue_num).clone(), new_cue_num, false);
                                 }
                                 self.clear_cues_edit_action();
                             }
                             response.request_focus();
                         } else {
                             ui.horizontal_centered(|ui| {
-                                ui.add(egui::Label::new(i.to_string()).selectable(false));
+                                let cue_num = self.cues().keys().nth(i).map(|n| n.to_string()).unwrap_or("?".to_string());
+                                ui.add(egui::Label::new(cue_num).selectable(false));
                             });
                         }
                     });
                     if cue_response.1.double_clicked() {
+                        let cue_num = self.cues().keys().nth(i).map(|n| n.to_string()).unwrap_or("?".to_string());
                         self.do_cues_edit_action(CuesEditAction::RenumberCue {
                             cue_ind: i,
-                            input_text: i.to_string(),
+                            input_text: cue_num,
                         })
                     }
                     // Desc
@@ -218,14 +228,23 @@ impl State {
                                 *self.cues_edit_action()
                                 && cue_ind == i
                             {
-                                let response =
-                                    ui.text_edit_singleline(self.cues_mut()[cue_ind].edit_name());
-                                if response.lost_focus() {
-                                    self.clear_cues_edit_action();
+                                if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
+                                    let response =
+                                        ui.text_edit_singleline(cue.edit_name());
+                                    if response.lost_focus() {
+                                        self.clear_cues_edit_action();
+                                    }
+                                    response.request_focus();
+                                } else {
+                                    log::warn!("Unable to get cue at index {cue_ind} to edit description");
                                 }
-                                response.request_focus();
                             } else {
-                                ui.add(egui::Label::new(self.cues()[i].name()).selectable(false));
+                                let desc_text = if let Some(cue) = self.cues().values().nth(i) {
+                                    cue.name()
+                                } else {
+                                    ""
+                                };
+                                ui.add(egui::Label::new(desc_text).selectable(false));
                             }
                         });
                     });
@@ -233,43 +252,46 @@ impl State {
                         self.do_cues_edit_action(CuesEditAction::EditCueDesc { cue_ind: i })
                     }
                     // DCAs
-                    let cue = &self.cues()[i];
-                    for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
-                        let (_, response) = row.col(|ui| {
-                            let dca_name = dca.name(self.channel_names());
-                            if !dca_name.is_empty() {
-                                let layout = egui::Layout::top_down(egui::Align::Center)
-                                    .with_main_justify(true)
-                                    .with_cross_align(egui::Align::Center);
-                                ui.with_layout(layout, |ui| {
-                                    ui.add(
-                                        egui::Label::new(
-                                            dca_name.to_string(),
-                                        )
-                                        .selectable(false),
-                                    );
-                                });
-                            } else {
-                                ui.centered_and_justified(|ui| {
-                                    ui.add(
-                                        egui::Label::new(
-                                            egui::RichText::new(format!("{}", j + 1))
-                                                .weak()
-                                                .italics(),
-                                        )
-                                        .selectable(false),
-                                    );
-                                });
+                    if let Some(cue) = &self.cues().values().nth(i) {
+                        for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
+                            let (_, response) = row.col(|ui| {
+                                let dca_name = dca.name(self.channel_names());
+                                if !dca_name.is_empty() {
+                                    let layout = egui::Layout::top_down(egui::Align::Center)
+                                        .with_main_justify(true)
+                                        .with_cross_align(egui::Align::Center);
+                                    ui.with_layout(layout, |ui| {
+                                        ui.add(
+                                            egui::Label::new(
+                                                dca_name.to_string(),
+                                            )
+                                            .selectable(false),
+                                        );
+                                    });
+                                } else {
+                                    ui.centered_and_justified(|ui| {
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(format!("{}", j + 1))
+                                                    .weak()
+                                                    .italics(),
+                                            )
+                                            .selectable(false),
+                                        );
+                                    });
+                                }
+                            });
+                            if response.double_clicked() {
+                                double_clicked_cell = Some((i, j));
                             }
-                        });
-                        if response.double_clicked() {
-                            double_clicked_cell = Some((i, j));
                         }
-                    }
-                    // Select row if clicked
-                    if row.response().clicked() {
-                        self.set_selected_cue(Some(i));
-                        self.fire_selected_cue();
+                        // Select row if clicked
+                        if row.response().clicked() {
+                            self.set_selected_cue(Some(i));
+                            self.fire_selected_cue();
+                        }
+                    } else {
+                        log::warn!("Could not find cue at index {i}");
                     }
                 })
             });
@@ -336,8 +358,14 @@ impl State {
                 egui::Window::new("Edit DCA Assignments")
                     .title_bar(false)
                     .show(ui.ctx(), |ui| {
-                        let dca_name =
-                            self.cues()[cue_ind].dcas()[dca_ind].name(self.channel_names());
+                        let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
+                            log::warn!("Unable to get cue at index {cue_ind}");
+                            return;
+                        };
+                        // FIX: this is unperformant. Figure out how to do it better. Maybe
+                        // take_mut?
+                        let mut coppied_cue = actual_cue.clone();
+                        let dca_name = coppied_cue.dcas()[dca_ind].name(self.channel_names());
                         let dca_name = if !dca_name.is_empty() {
                             dca_name
                         } else {
@@ -349,7 +377,7 @@ impl State {
                         // DCA name edit
                         ui.horizontal(|ui| {
                             ui.label("Name:");
-                            let dca_name = self.cues_mut()[cue_ind].dcas_mut()[dca_ind].edit_name();
+                            let dca_name = coppied_cue.dcas_mut()[dca_ind].edit_name();
                             if let Some(name) = dca_name {
                                 ui.text_edit_singleline(name);
                                 if name.is_empty() {
@@ -367,7 +395,7 @@ impl State {
                         // Channel assignments
                         let num_channels = self.num_channels();
                         let mut assigned: Vec<bool> = vec![false; num_channels.into()];
-                        for ch in self.cues()[cue_ind].dcas()[dca_ind].assigned() {
+                        for ch in coppied_cue.dcas()[dca_ind].assigned() {
                             assigned[ch.index() as usize] = true;
                         }
                         let assigned_pre = assigned.clone();
@@ -388,14 +416,19 @@ impl State {
                         {
                             if pre != post {
                                 if *post {
-                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind]
+                                    coppied_cue.dcas_mut()[dca_ind]
                                         .assign(Channel::from_index(ch_ind as u8))
                                 } else {
-                                    self.cues_mut()[cue_ind].dcas_mut()[dca_ind]
+                                    coppied_cue.dcas_mut()[dca_ind]
                                         .unassign(Channel::from_index(ch_ind as u8))
                                 }
                             }
                         }
+                        let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
+                            log::warn!("Unable to get cue at index {cue_ind}");
+                            return;
+                        };
+                        *actual_cue = coppied_cue;
                     });
             }
             CuesEditAction::EditCueDesc { .. } | CuesEditAction::RenumberCue { .. } => (), // Not a popup
