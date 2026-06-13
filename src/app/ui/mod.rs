@@ -244,7 +244,7 @@ impl State {
                                 ui.with_layout(layout, |ui| {
                                     ui.add(
                                         egui::Label::new(
-                                            dca.name(self.channel_names()).to_string(),
+                                            dca_name.to_string(),
                                         )
                                         .selectable(false),
                                     );

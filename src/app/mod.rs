@@ -7,7 +7,7 @@ mod ui;
 pub use board::Decibels;
 use board::{Channel, Connectable};
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// Top level of program state
 pub struct State {
@@ -285,7 +285,7 @@ impl Cue {
 /// The state of a DCA, which can be realized by calling a cue
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 struct DcaState {
-    assigned: HashSet<Channel>,
+    assigned: BTreeSet<Channel>,
     name: Option<String>,
     level: Option<Decibels>,
 }
@@ -306,10 +306,10 @@ impl DcaState {
                 } else {
                     format!("Ch {}", ch.number())
                 };
-                if !name.is_empty() {
+                if name.is_empty() {
                     name = ch_name;
                 } else {
-                    name = format!("{name}, {}", ch_name)
+                    name = format!("{name}, {}", ch_name);
                 }
             }
             name.to_string()
@@ -318,7 +318,7 @@ impl DcaState {
     fn edit_name(&mut self) -> &mut Option<String> {
         &mut self.name
     }
-    fn assigned(&self) -> &HashSet<Channel> {
+    fn assigned(&self) -> &BTreeSet<Channel> {
         &self.assigned
     }
     /// Assigns the given channel to this DCA
