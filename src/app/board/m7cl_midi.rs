@@ -151,7 +151,90 @@ impl super::Connectable for M7CLMidi {
     }
 }
 
+/// For external use
+/// (part of med level API)
+impl M7CLMidi {
+    /// For a connection which failed to initialize MIDI, retry initializing
+    pub fn try_init_midi(&mut self) {
+        if let ConnectionState::NoMidi(_) = self.conn {
+            // Yes this is exactly like `Self::new`
+            let midi = MidiOutput::new(MIDI_CLIENT_NAME);
+            match midi {
+                Ok(midi) => {
+                    let ports = midi.ports();
+                    self.conn = ConnectionState::YesMidiNoConnection(midi, ports, None)
+                }
+                Err(init_error) => self.conn = ConnectionState::NoMidi(init_error),
+            }
+        } else {
+            log::warn!("`try_init_midi` called but we already initialized MIDI");
+        }
+    }
+    /// For a connection with MIDI initialized but not connected, return the list of available
+    /// ports
+    pub fn ports(&self) -> Result<midir::MidiOutputPorts, ()> {
+        if let ConnectionState::YesMidiNoConnection(_, ports, _) = &self.conn {
+            Ok(ports.clone())
+        } else {
+            log::warn!("Get `ports` called but is not available in current state");
+            Err(())
+        }
+    }
+    /// For a connection with MIDI initialized but not connected, update the list of MIDI output ports
+    pub fn update_ports_list(&mut self) {
+        if let ConnectionState::YesMidiNoConnection(midi, ports, _) = &mut self.conn {
+            *ports = midi.ports();
+        } else {
+            log::warn!("`update_ports_list` called but is not available in current state");
+        }
+    }
+    /// For a connection with MIDI initialized but not connected, try to connect to the given port
+    pub fn try_connect(&mut self, port: MidiOutputPort) {
+        // Because connect needs ownership of midi, we need to do this maneuver to get `self.conn`
+        // out from behind the reference. Note that we must return `conn` from the closure.
+        take_mut::take(&mut self.conn, |conn| {
+            if let ConnectionState::YesMidiNoConnection(midi, _, _) = conn {
+                let connection = midi.connect(&port, MIDI_CONNECTION_NAME);
+                match connection {
+                    Ok(connection) => ConnectionState::Connected(connection),
+                    Err(connection_error) => {
+                        log::error!("Unable to connect to MIDI port: {connection_error}");
+                        let error = connection_error.kind();
+                        let midi = connection_error.into_inner();
+                        let ports = midi.ports();
+                        ConnectionState::YesMidiNoConnection(midi, ports, Some(error))
+                    }
+                }
+            } else {
+                log::warn!("`try_connect` called but is not available in current state");
+                conn
+            }
+        });
+    }
+    /// For a connection which is connected, disconnect
+    pub fn disconnect(&mut self) {
+        if matches!(self.conn, ConnectionState::Connected(_)) {
+            // See `try_connect` for why we do this
+            take_mut::take(&mut self.conn, |conn| {
+                if let ConnectionState::Connected(conn) = conn {
+                    let midi = conn.close();
+                    let ports = midi.ports();
+                    ConnectionState::YesMidiNoConnection(midi, ports, None)
+                } else {
+                    log::error!(
+                        "Should be in state `Connected` from `matches!` above but something has gone very wrong, failed to disconnect"
+                    );
+                    conn
+                }
+            })
+        } else {
+            log::warn!("`disconnect` called on a connection which is not connected");
+        }
+    }
+}
+
 /// For internal use
+/// Old API (low + med level)
 impl M7CLMidi {
     /// Fire the provided cue, taking into account the differences between it and `prev_cue` and
     /// updates cached board state
@@ -177,6 +260,30 @@ impl M7CLMidi {
             self.board_state = Some(cue.clone())
         }
     }
+}
+/// Improved API
+/// New API (low level)
+impl M7CLMidi {
+    // move into trait default impl
+    fn fire_diff(&mut self, diff: Vec<super::BoardEdit>) {
+        for edit in diff {
+            self.fire_board_edit(edit);
+        }
+    }
+    fn fire_board_edit(&mut self, edit: super::BoardEdit) {
+        use super::BoardEdit as BE;
+        match edit {
+            BE::ChannelMute(ch, mute) => self.send_ch_on(ch.index(), !mute),
+            BE::ChannelDcaAssign(ch, dca, assign) => self.send_ch_dca(ch.index(), dca.index(), assign),
+            BE::ChannelName(ch, name) => self.send_channel_name(ch.index(), &name),
+            BE::DcaLevel(_dca, _level) => unimplemented!(),
+            BE::DcaName(dca, name) => self.send_dca_name(dca.index(), &name),
+        }
+    }
+}
+/// For internal use
+/// (part of low level API)
+impl M7CLMidi {
     /// Send the messages to turn on/off the given channel
     fn send_ch_on(&mut self, ch_ind: u8, on: bool) {
         let val = if on {
@@ -341,103 +448,3 @@ impl M7CLMidi {
     }
 }
 
-/// For external use
-impl M7CLMidi {
-    /// For a connection which failed to initialize MIDI, retry initializing
-    pub fn try_init_midi(&mut self) {
-        if let ConnectionState::NoMidi(_) = self.conn {
-            // Yes this is exactly like `Self::new`
-            let midi = MidiOutput::new(MIDI_CLIENT_NAME);
-            match midi {
-                Ok(midi) => {
-                    let ports = midi.ports();
-                    self.conn = ConnectionState::YesMidiNoConnection(midi, ports, None)
-                }
-                Err(init_error) => self.conn = ConnectionState::NoMidi(init_error),
-            }
-        } else {
-            log::warn!("`try_init_midi` called but we already initialized MIDI");
-        }
-    }
-    /// For a connection with MIDI initialized but not connected, return the list of available
-    /// ports
-    pub fn ports(&self) -> Result<midir::MidiOutputPorts, ()> {
-        if let ConnectionState::YesMidiNoConnection(_, ports, _) = &self.conn {
-            Ok(ports.clone())
-        } else {
-            log::warn!("Get `ports` called but is not available in current state");
-            Err(())
-        }
-    }
-    /// For a connection with MIDI initialized but not connected, update the list of MIDI output ports
-    pub fn update_ports_list(&mut self) {
-        if let ConnectionState::YesMidiNoConnection(midi, ports, _) = &mut self.conn {
-            *ports = midi.ports();
-        } else {
-            log::warn!("`update_ports_list` called but is not available in current state");
-        }
-    }
-    /// For a connection with MIDI initialized but not connected, try to connect to the given port
-    pub fn try_connect(&mut self, port: MidiOutputPort) {
-        // Because connect needs ownership of midi, we need to do this maneuver to get `self.conn`
-        // out from behind the reference. Note that we must return `conn` from the closure.
-        take_mut::take(&mut self.conn, |conn| {
-            if let ConnectionState::YesMidiNoConnection(midi, _, _) = conn {
-                let connection = midi.connect(&port, MIDI_CONNECTION_NAME);
-                match connection {
-                    Ok(connection) => ConnectionState::Connected(connection),
-                    Err(connection_error) => {
-                        log::error!("Unable to connect to MIDI port: {connection_error}");
-                        let error = connection_error.kind();
-                        let midi = connection_error.into_inner();
-                        let ports = midi.ports();
-                        ConnectionState::YesMidiNoConnection(midi, ports, Some(error))
-                    }
-                }
-            } else {
-                log::warn!("`try_connect` called but is not available in current state");
-                conn
-            }
-        });
-    }
-    /// For a connection which is connected, disconnect
-    pub fn disconnect(&mut self) {
-        if matches!(self.conn, ConnectionState::Connected(_)) {
-            // See `try_connect` for why we do this
-            take_mut::take(&mut self.conn, |conn| {
-                if let ConnectionState::Connected(conn) = conn {
-                    let midi = conn.close();
-                    let ports = midi.ports();
-                    ConnectionState::YesMidiNoConnection(midi, ports, None)
-                } else {
-                    log::error!(
-                        "Should be in state `Connected` from `matches!` above but something has gone very wrong, failed to disconnect"
-                    );
-                    conn
-                }
-            })
-        } else {
-            log::warn!("`disconnect` called on a connection which is not connected");
-        }
-    }
-}
-
-/// Improved API
-impl M7CLMidi {
-    // move into trait default impl
-    fn fire_diff(&mut self, diff: Vec<super::BoardEdit>) {
-        for edit in diff {
-            self.fire_board_edit(edit);
-        }
-    }
-    fn fire_board_edit(&mut self, edit: super::BoardEdit) {
-        use super::BoardEdit as BE;
-        match edit {
-            BE::ChannelMute(ch, mute) => self.send_ch_on(ch.index(), !mute),
-            BE::ChannelDcaAssign(ch, dca, assign) => self.send_ch_dca(ch.index(), dca.index(), assign),
-            BE::ChannelName(ch, name) => self.send_channel_name(ch.index(), &name),
-            BE::DcaLevel(_dca, _level) => unimplemented!(),
-            BE::DcaName(dca, name) => self.send_dca_name(dca.index(), &name),
-        }
-    }
-}
