@@ -56,12 +56,14 @@ impl Dca {
     pub fn index(&self) -> u8 {
         self.index
     }
+    #[allow(dead_code)] // for completeness
     /// Returns the number of the DCA (eg DCA 1 returns 1)
     pub fn number(&self) -> u8 {
         self.index + 1
     }
 }
 
+#[derive(Clone)]
 /// Represents all supported board edit operations.
 pub enum BoardEdit {
     /// Edit to a channel's mute. If true, the channel is now muted.

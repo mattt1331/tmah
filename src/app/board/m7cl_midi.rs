@@ -156,78 +156,18 @@ impl M7CLMidi {
     /// Fire the provided cue, taking into account the differences between it and `prev_cue` and
     /// updates cached board state
     fn fire_cue_diff(&mut self, cue: &Cue, prev_cue: &Cue) {
-        let prev_bitset = Self::channel_dca_bitset(self, prev_cue);
-        let next_bitset = Self::channel_dca_bitset(self, cue);
-        for (ch_ind, (prev, next)) in prev_bitset.iter().zip(next_bitset).enumerate() {
-            if *prev == 0 && next == 0 {
-                // Channel was and is off, do nothing
-            } else if *prev == 0 && next != 0 {
-                // Channel was off and is now on
-                for dca_ind in 0..8 {
-                    let assigned = (next >> dca_ind) & 0b0000_0001 == 0b0000_0001;
-                    if assigned {
-                        self.send_ch_dca(ch_ind as u8, dca_ind, true);
-                    }
-                }
-                self.send_ch_on(ch_ind as u8, true);
-            } else if *prev != 0 && next == 0 {
-                // Channel was on and is now off
-                self.send_ch_on(ch_ind as u8, false);
-                for dca_ind in 0..8 {
-                    let was_assigned = (prev >> dca_ind) & 0b0000_0001 == 0b0000_0001;
-                    if was_assigned {
-                        self.send_ch_dca(ch_ind as u8, dca_ind, false);
-                    }
-                }
-            } else {
-                // Channel was on and is still on
-                for dca_ind in 0..8 {
-                    let is_assigned = (next >> dca_ind) & 0b0000_0001 == 0b0000_0001;
-                    let was_assigned = (prev >> dca_ind) & 0b0000_0001 == 0b0000_0001;
-                    if !was_assigned && is_assigned {
-                        self.send_ch_dca(ch_ind as u8, dca_ind, true);
-                    } else if was_assigned && !is_assigned {
-                        self.send_ch_dca(ch_ind as u8, dca_ind, false);
-                    }
-                }
-            }
-        }
+        let diff = Cue::diff(prev_cue, cue);
+        self.fire_diff(diff);
         self.update_board_state_with_fired(cue)
     }
     /// Fire the provided cue in full and updates cached board state
     fn fire_full_cue(&mut self, cue: &Cue) {
-        let channel_dcas = Self::channel_dca_bitset(self, cue);
-
-        // Send appropriate messages per channel
-        for (ch_ind, channel) in channel_dcas.iter().enumerate() {
-            for dca_ind in 0..8 {
-                let assigned = (channel >> dca_ind) & 0b0000_0001 == 0b0000_0001;
-                self.send_ch_dca(ch_ind as u8, dca_ind, assigned);
-            }
-            if *channel > 0 {
-                self.send_ch_on(ch_ind as u8, true)
-            } else {
-                self.send_ch_on(ch_ind as u8, false)
-            }
-        }
-
+        // FIX: This is a hack. It works, but it's dumb. While decoupling this from app above and
+        // from board edits below, fix this.
+        let blank_cue = Cue::default();
+        let diff = Cue::diff(&blank_cue, cue);
+        self.fire_diff(diff);
         self.update_board_state_with_fired(cue);
-    }
-    /// Returns a `Vec` with one entry per controlled channel. The entry is a `u8` bitmap of which
-    /// DCAs the channel is assigned to. Note that this board has 8 DCAs.
-    fn channel_dca_bitset(&self, cue: &Cue) -> Vec<u8> {
-        let mut channel_dcas: Vec<u8> = (0..self.num_channels_controlled).map(|_| 0).collect();
-
-        // Switch from channels of DCA to DCAs of channel
-        for (dca_ind, dca) in cue.dcas().iter().enumerate() {
-            for channel in dca.assigned() {
-                if channel.index() as usize > channel_dcas.len() - 1 {
-                    continue;
-                }
-                channel_dcas[channel.index() as usize] |= 0b0000_0001 << dca_ind;
-            }
-        }
-        channel_dcas
     }
     /// Update the cache of the board state assuming this cue has just been fired
     fn update_board_state_with_fired(&mut self, cue: &Cue) {
@@ -478,6 +418,26 @@ impl M7CLMidi {
             })
         } else {
             log::warn!("`disconnect` called on a connection which is not connected");
+        }
+    }
+}
+
+/// Improved API
+impl M7CLMidi {
+    // move into trait default impl
+    fn fire_diff(&mut self, diff: Vec<super::BoardEdit>) {
+        for edit in diff {
+            self.fire_board_edit(edit);
+        }
+    }
+    fn fire_board_edit(&mut self, edit: super::BoardEdit) {
+        use super::BoardEdit as BE;
+        match edit {
+            BE::ChannelMute(ch, mute) => self.send_ch_on(ch.index(), !mute),
+            BE::ChannelDcaAssign(ch, dca, assign) => self.send_ch_dca(ch.index(), dca.index(), assign),
+            BE::ChannelName(ch, name) => self.send_channel_name(ch.index(), &name),
+            BE::DcaLevel(_dca, _level) => unimplemented!(),
+            BE::DcaName(dca, name) => self.send_dca_name(dca.index(), &name),
         }
     }
 }
