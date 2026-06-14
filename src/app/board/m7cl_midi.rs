@@ -274,7 +274,9 @@ impl M7CLMidi {
         use super::BoardEdit as BE;
         match edit {
             BE::ChannelMute(ch, mute) => self.send_ch_on(ch.index(), !mute),
-            BE::ChannelDcaAssign(ch, dca, assign) => self.send_ch_dca(ch.index(), dca.index(), assign),
+            BE::ChannelDcaAssign(ch, dca, assign) => {
+                self.send_ch_dca(ch.index(), dca.index(), assign)
+            }
             BE::ChannelName(ch, name) => self.send_channel_name(ch.index(), &name),
             BE::DcaLevel(_dca, _level) => unimplemented!(),
             BE::DcaName(dca, name) => self.send_dca_name(dca.index(), &name),
@@ -447,4 +449,3 @@ impl M7CLMidi {
         }
     }
 }
-

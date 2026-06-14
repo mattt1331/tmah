@@ -81,7 +81,7 @@ impl State {
         self.cues.insert(number.clone(), cue);
         if !no_undo {
             if let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
-                self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: cue_ind});
+                self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: cue_ind });
                 self.cues_stack_undo(Box::new(move |state| {
                     state.delete_cue(&number, true);
                 }));
@@ -111,13 +111,13 @@ impl State {
         if matches!(self.cues.get(&end_num), None) {
             // Get the cue we are renumbering
             if let Some(cue) = self.cues.remove(&start_num) {
-                    self.cues.insert(end_num.clone(), cue);
+                self.cues.insert(end_num.clone(), cue);
 
-                    if !no_undo {
-                        self.cues_stack_undo(Box::new(move |state| {
-                            state.renumber_cue(end_num, start_num, true);
-                        }));
-                    }
+                if !no_undo {
+                    self.cues_stack_undo(Box::new(move |state| {
+                        state.renumber_cue(end_num, start_num, true);
+                    }));
+                }
             } else {
                 log::warn!("Could not renumber cue because getting the cue failed");
             }
@@ -171,7 +171,9 @@ impl State {
                 let cue = cue.clone();
                 self.connection.fire_cue(&cue);
             } else {
-                log::error!("Fire cue function called but the selected cue at index {ind} could not be found");
+                log::error!(
+                    "Fire cue function called but the selected cue at index {ind} could not be found"
+                );
             }
         }
     }
@@ -192,7 +194,9 @@ impl State {
     }
 }
 
-#[derive(Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 /// Represents a cue's number. Cues can optionally be nested up to three levels deep. However, the
 /// second two levels are optional. Logically, if the third level is present the second one must be
 /// as well. Note that the numbers should be displayed as one plus their value. Thus, (0, None) is
@@ -208,7 +212,7 @@ impl CueNumber {
             Some(first_num) => match input.next() {
                 Some(second_num) => Ok(CueNumber(first_num, Some((second_num, input.next())))),
                 None => Ok(CueNumber(first_num, None)),
-            }
+            },
             None => Err(()),
         }
     }
@@ -232,7 +236,7 @@ impl std::fmt::Display for CueNumber {
             Some((b, c)) => match c {
                 Some(c) => write!(f, "{}.{}.{}", self.0, b, c),
                 None => write!(f, "{}.{}", self.0, b),
-            }
+            },
             None => write!(f, "{}", self.0),
         }?;
         Ok(())
@@ -319,13 +323,9 @@ impl Cue {
             };
             diff = diff
                 .into_iter()
-                .filter(|edit| {
-                    match edit {
-                        board::BoardEdit::ChannelMute(channel, true) => {
-                            *channel != unmute_channel
-                        }
-                        _ => true,
-                    }
+                .filter(|edit| match edit {
+                    board::BoardEdit::ChannelMute(channel, true) => *channel != unmute_channel,
+                    _ => true,
                 })
                 .collect();
         }
