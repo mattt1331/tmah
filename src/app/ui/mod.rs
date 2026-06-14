@@ -364,8 +364,8 @@ impl State {
                         };
                         // FIX: this is unperformant. Figure out how to do it better. Maybe
                         // take_mut?
-                        let mut coppied_cue = actual_cue.clone();
-                        let dca_name = coppied_cue.dcas()[dca_ind].name(self.channel_names());
+                        let mut copied_cue = actual_cue.clone();
+                        let dca_name = copied_cue.dcas()[dca_ind].name(self.channel_names());
                         let dca_name = if !dca_name.is_empty() {
                             dca_name
                         } else {
@@ -377,7 +377,7 @@ impl State {
                         // DCA name edit
                         ui.horizontal(|ui| {
                             ui.label("Name:");
-                            let dca_name = coppied_cue.dcas_mut()[dca_ind].edit_name();
+                            let dca_name = copied_cue.dcas_mut()[dca_ind].edit_name();
                             if let Some(name) = dca_name {
                                 ui.text_edit_singleline(name);
                                 if name.is_empty() {
@@ -395,7 +395,7 @@ impl State {
                         // Channel assignments
                         let num_channels = self.num_channels();
                         let mut assigned: Vec<bool> = vec![false; num_channels.into()];
-                        for ch in coppied_cue.dcas()[dca_ind].assigned() {
+                        for ch in copied_cue.dcas()[dca_ind].assigned() {
                             assigned[ch.index() as usize] = true;
                         }
                         let assigned_pre = assigned.clone();
@@ -416,10 +416,10 @@ impl State {
                         {
                             if pre != post {
                                 if *post {
-                                    coppied_cue.dcas_mut()[dca_ind]
+                                    copied_cue.dcas_mut()[dca_ind]
                                         .assign(Channel::from_index(ch_ind as u8))
                                 } else {
-                                    coppied_cue.dcas_mut()[dca_ind]
+                                    copied_cue.dcas_mut()[dca_ind]
                                         .unassign(Channel::from_index(ch_ind as u8))
                                 }
                             }
@@ -428,7 +428,7 @@ impl State {
                             log::warn!("Unable to get cue at index {cue_ind}");
                             return;
                         };
-                        *actual_cue = coppied_cue;
+                        *actual_cue = copied_cue;
                     });
             }
             CuesEditAction::EditCueDesc { .. } | CuesEditAction::RenumberCue { .. } => (), // Not a popup

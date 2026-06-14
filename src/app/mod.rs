@@ -166,7 +166,7 @@ impl State {
     pub fn fire_selected_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
             if let Some(cue) = self.cues().values().nth(ind) {
-                // FIX: There has to be a better way to do this. Maybe swtich to selected cue
+                // FIX: There has to be a better way to do this. Maybe switch to selected cue
                 // number, not index?
                 let cue = cue.clone();
                 self.connection.fire_cue(&cue);
