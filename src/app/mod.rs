@@ -180,18 +180,20 @@ impl State {
                 cue_ind,
                 dca_ind,
                 ref original_dca_name,
+                ref original_assignment,
             } => {
                 let original_dca_name = original_dca_name.clone();
+                let original_assignment = original_assignment.clone();
                 self.cues_stack_undo_action(Box::new(move |state| {
                     let dca = state.cues.values_mut().nth(cue_ind)
                         .map(|cue| &mut cue.dcas[dca_ind]);
                     if let Some(dca) = dca {
                         dca.name = original_dca_name;
+                        dca.set_assigned(original_assignment)
                     } else {
                         log::warn!("Could not find DCA at index {dca_ind} in cue at index {cue_ind} for undoing dca assign popup edits");
                     }
                 }));
-                log::warn!("Please implement undo for assigning channels to dcas");
             }
             ui::CuesEditAction::EditCueDesc { cue_ind: _ } => {
                 log::warn!("Please implement undo for editing cue desc")
@@ -421,6 +423,9 @@ impl DcaState {
     }
     fn assigned(&self) -> &BTreeSet<Channel> {
         &self.assigned
+    }
+    fn set_assigned(&mut self, assignment: BTreeSet<Channel>) {
+        self.assigned = assignment;
     }
     /// Assigns the given channel to this DCA
     fn assign(&mut self, ch: Channel) {

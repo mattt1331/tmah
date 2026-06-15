@@ -4,6 +4,7 @@ use super::board;
 use super::{Channel, CueNumber, State};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
+use std::collections::BTreeSet;
 
 /// The different screens of the ui, like the cues, board connection, etc
 #[derive(Default, PartialEq)]
@@ -25,6 +26,7 @@ pub enum CuesEditAction {
         cue_ind: usize,
         dca_ind: usize,
         original_dca_name: Option<String>,
+        original_assignment: BTreeSet<Channel>,
     },
     EditCueDesc {
         cue_ind: usize,
@@ -115,15 +117,12 @@ impl State {
 
         // If a DCA was double clicked, edit its assignment
         if let Some((i, j)) = double_clicked_cell {
+            let dca = self.cues().values().nth(i).map(|cue| &cue.dcas[j]);
             self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
-                original_dca_name: self
-                    .cues()
-                    .values()
-                    .nth(i)
-                    .map(|cue| &cue.dcas[j])
-                    .and_then(|dca| dca.name.clone()),
+                original_dca_name: dca.and_then(|dca| dca.name.clone()),
+                original_assignment: dca.map(|dca| dca.assigned().clone()).unwrap_or_default(),
             });
         }
 
@@ -385,6 +384,7 @@ impl State {
             cue_ind,
             dca_ind,
             original_dca_name: _,
+            original_assignment: _,
         } = self.cues_edit_action()
         {
             let cue = self.cues().values().nth(*cue_ind).cloned();
@@ -398,10 +398,12 @@ impl State {
             log::warn!("Edit dca assign popup called but we are not editing a dca");
             return;
         };
+
         if let CuesEditAction::EditDcaAssign {
             cue_ind,
             dca_ind,
             original_dca_name: _,
+            original_assignment: _,
         } = self.cues_edit_action()
         {
             egui::Window::new("Edit DCA Assignments")
