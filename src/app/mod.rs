@@ -98,18 +98,16 @@ impl State {
     /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue at this number
-        if matches!(self.cues.get(&number), Some(_)) {
+        if self.cues.contains_key(&number) {
             log::warn!("Did not insert cue because this number is already occupied");
             return;
         }
         self.cues.insert(number.clone(), cue);
-        if !no_undo {
-            if let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
-                self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: cue_ind });
-                self.cues_stack_undo_action(Box::new(move |state| {
-                    state.delete_cue(&number, true);
-                }));
-            }
+        if !no_undo && let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
+            self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind });
+            self.cues_stack_undo_action(Box::new(move |state| {
+                state.delete_cue(&number, true);
+            }));
         }
     }
     /// Deletes the cue at the specified number.
@@ -135,7 +133,7 @@ impl State {
     /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue with `end_number`
-        if matches!(self.cues.get(&end_num), None) {
+        if !self.cues.contains_key(&end_num) {
             // Get the cue we are renumbering
             if let Some(cue) = self.cues.remove(&start_num) {
                 self.cues.insert(end_num.clone(), cue);
@@ -203,7 +201,6 @@ impl State {
                 input_text: _,
             } => {
                 // Renumbering cues is a one-shot and undo is implemented elsewhere
-                ()
             }
         }
         self.cues_edit_action = ui::CuesEditAction::None;
@@ -377,13 +374,10 @@ impl Cue {
                     "All elements of `unmutes` should be `BoardEdit::ChannelMute` because of above"
                 );
             };
-            diff = diff
-                .into_iter()
-                .filter(|edit| match edit {
-                    board::BoardEdit::ChannelMute(channel, true) => *channel != unmute_channel,
-                    _ => true,
-                })
-                .collect();
+            diff.retain(|edit| match edit {
+                board::BoardEdit::ChannelMute(channel, true) => *channel != unmute_channel,
+                _ => true,
+            });
         }
         diff
     }

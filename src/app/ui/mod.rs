@@ -97,12 +97,7 @@ impl State {
 
         ui.horizontal(|ui| {
             if ui.button("Add cue at bot.").clicked() {
-                let mut new_bottom_num = self
-                    .cues()
-                    .keys()
-                    .last()
-                    .map(|num| num.clone())
-                    .unwrap_or_default();
+                let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
                 new_bottom_num.increment_lowest();
                 self.add_cue(super::Cue::default(), new_bottom_num, false);
             }
@@ -128,8 +123,7 @@ impl State {
                     .values()
                     .nth(i)
                     .map(|cue| &cue.dcas[j])
-                    .map(|dca| dca.name.clone())
-                    .flatten(),
+                    .and_then(|dca| dca.name.clone()),
             });
         }
 
@@ -393,7 +387,7 @@ impl State {
             original_dca_name: _,
         } = self.cues_edit_action()
         {
-            let cue = self.cues().values().nth(*cue_ind).map(|cue| cue.clone());
+            let cue = self.cues().values().nth(*cue_ind).cloned();
             if let Some(cue) = cue {
                 (cue, *cue_ind, *dca_ind)
             } else {
