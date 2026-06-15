@@ -56,6 +56,7 @@ impl Default for State {
     }
 }
 
+/// Basic getters and setters
 impl State {
     pub fn new(_cc: &eframe::CreationContext) -> Self {
         Self::default()
@@ -72,6 +73,29 @@ impl State {
     pub fn cues_mut(&mut self) -> &mut BTreeMap<CueNumber, Cue> {
         &mut self.cues
     }
+    pub fn channel_names(&self) -> &ChannelNames {
+        &self.ch_names
+    }
+    pub fn channel_names_mut(&mut self) -> &mut ChannelNames {
+        &mut self.ch_names
+    }
+    pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
+        &self.cues_edit_action
+    }
+    pub fn cues_edit_action_mut(&mut self) -> &mut ui::CuesEditAction {
+        &mut self.cues_edit_action
+    }
+    pub fn selected_cue(&self) -> Option<usize> {
+        self.cues_selected_cue_ind
+    }
+    pub fn connection(&self) -> &Box<dyn board::Connectable> {
+        &self.connection
+    }
+}
+/// Methods with additional logic
+impl State {
+    /// Adds the given cue at the given number.
+    /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue at this number
         if matches!(self.cues.get(&number), Some(_)) {
@@ -82,17 +106,19 @@ impl State {
         if !no_undo {
             if let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
                 self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind: cue_ind });
-                self.cues_stack_undo(Box::new(move |state| {
+                self.cues_stack_undo_action(Box::new(move |state| {
                     state.delete_cue(&number, true);
                 }));
             }
         }
     }
+    /// Deletes the cue at the specified number.
+    /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn delete_cue(&mut self, number: &CueNumber, no_undo: bool) {
         let removed_cue = self.cues.remove(number);
         if !no_undo && let Some(removed_cue) = removed_cue {
             let number = number.clone();
-            self.cues_stack_undo(Box::new(move |state| {
+            self.cues_stack_undo_action(Box::new(move |state| {
                 state.add_cue(removed_cue, number, true);
             }));
         }
@@ -106,6 +132,7 @@ impl State {
         }
     }
     /// Move the cue at `start_index` to `end_number`.
+    /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue with `end_number`
         if matches!(self.cues.get(&end_num), None) {
@@ -114,7 +141,7 @@ impl State {
                 self.cues.insert(end_num.clone(), cue);
 
                 if !no_undo {
-                    self.cues_stack_undo(Box::new(move |state| {
+                    self.cues_stack_undo_action(Box::new(move |state| {
                         state.renumber_cue(end_num, start_num, true);
                     }));
                 }
@@ -125,35 +152,64 @@ impl State {
             log::warn!("Could not renumber cue because new number already exists");
         }
     }
-    pub fn cues_stack_undo(&mut self, action: Box<UndoAction>) {
+    /// Adds the given undo action to the top of the undo stack.
+    pub fn cues_stack_undo_action(&mut self, action: Box<UndoAction>) {
         self.cues_undo_stack.push(action);
     }
+    /// Executes the undo action at the top of the stack and pops it off of the stack.
     pub fn cues_do_undo(&mut self) {
         if let Some(action) = self.cues_undo_stack.pop() {
             action(self);
         }
     }
-    pub fn channel_names(&self) -> &ChannelNames {
-        &self.ch_names
-    }
-    pub fn channel_names_mut(&mut self) -> &mut ChannelNames {
-        &mut self.ch_names
-    }
-    pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
-        &self.cues_edit_action
-    }
-    pub fn cues_edit_action_mut(&mut self) -> &mut ui::CuesEditAction {
-        &mut self.cues_edit_action
-    }
+    /// Commences the given edit action. If another edit action is already active, ends that
+    /// action.
     pub fn do_cues_edit_action(&mut self, action: ui::CuesEditAction) {
+        if !matches!(self.cues_edit_action, ui::CuesEditAction::None) {
+            self.end_cues_edit_action();
+        }
         self.cues_edit_action = action;
     }
-    pub fn clear_cues_edit_action(&mut self) {
+    /// Ends any active cues edit action. For actions which edit state continuously (eg dca assign
+    /// popup), stacks an undo action.
+    pub fn end_cues_edit_action(&mut self) {
+        match self.cues_edit_action {
+            ui::CuesEditAction::None => return,
+            ui::CuesEditAction::EditChannelNames => {
+                log::warn!("Please implement undo for edit channel names")
+            }
+            ui::CuesEditAction::EditDcaAssign {
+                cue_ind,
+                dca_ind,
+                ref original_dca_name,
+            } => {
+                let original_dca_name = original_dca_name.clone();
+                self.cues_stack_undo_action(Box::new(move |state| {
+                    let dca = state.cues.values_mut().nth(cue_ind)
+                        .map(|cue| &mut cue.dcas[dca_ind]);
+                    if let Some(dca) = dca {
+                        dca.name = original_dca_name;
+                    } else {
+                        log::warn!("Could not find DCA at index {dca_ind} in cue at index {cue_ind} for undoing dca assign popup edits");
+                    }
+                }));
+                log::warn!("Please implement undo for assigning channels to dcas");
+            }
+            ui::CuesEditAction::EditCueDesc { cue_ind: _ } => {
+                log::warn!("Please implement undo for editing cue desc")
+            }
+            ui::CuesEditAction::RenumberCue {
+                cue_ind: _,
+                input_text: _,
+            } => {
+                // Renumbering cues is a one-shot and undo is implemented elsewhere
+                ()
+            }
+        }
         self.cues_edit_action = ui::CuesEditAction::None;
     }
-    pub fn selected_cue(&self) -> Option<usize> {
-        self.cues_selected_cue_ind
-    }
+    /// Sets the selected cue to the given index, validating the index. If `None` is given instead,
+    /// deselect any selected cue.
     pub fn set_selected_cue(&mut self, cue_ind: Option<usize>) {
         if let Some(ind) = cue_ind
             && ind < self.cues.len()
@@ -163,6 +219,7 @@ impl State {
             self.cues_selected_cue_ind = None;
         }
     }
+    /// Fires the selected cue.
     pub fn fire_selected_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
             if let Some(cue) = self.cues().values().nth(ind) {
@@ -177,6 +234,7 @@ impl State {
             }
         }
     }
+    /// Increments selection index and fires the newly selected cue.
     pub fn fire_next_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
             self.set_selected_cue(Some(ind + 1));
@@ -186,11 +244,9 @@ impl State {
             self.fire_selected_cue();
         }
     }
+    /// Sends the channel names to the board.
     pub fn fire_channel_names(&mut self) {
         self.connection.fire_channel_names(&self.ch_names);
-    }
-    pub fn connection(&self) -> &Box<dyn board::Connectable> {
-        &self.connection
     }
 }
 

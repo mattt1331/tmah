@@ -24,6 +24,7 @@ pub enum CuesEditAction {
     EditDcaAssign {
         cue_ind: usize,
         dca_ind: usize,
+        original_dca_name: Option<String>,
     },
     EditCueDesc {
         cue_ind: usize,
@@ -122,6 +123,13 @@ impl State {
             self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
+                original_dca_name: self
+                    .cues()
+                    .values()
+                    .nth(i)
+                    .map(|cue| &cue.dcas[j])
+                    .map(|dca| dca.name.clone())
+                    .flatten(),
             });
         }
 
@@ -209,7 +217,7 @@ impl State {
                                         false,
                                     );
                                 }
-                                self.clear_cues_edit_action();
+                                self.end_cues_edit_action();
                             }
                             response.request_focus();
                         } else {
@@ -249,7 +257,7 @@ impl State {
                                 if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
                                     let response = ui.text_edit_singleline(cue.edit_name());
                                     if response.lost_focus() {
-                                        self.clear_cues_edit_action();
+                                        self.end_cues_edit_action();
                                     }
                                     response.request_focus();
                                 } else {
@@ -319,7 +327,7 @@ impl State {
         let ctx = ui.ctx();
         if !ctx.egui_wants_keyboard_input() && ctx.input(|input| input.key_down(egui::Key::Escape))
         {
-            self.clear_cues_edit_action();
+            self.end_cues_edit_action();
         }
         match *self.cues_edit_action() {
             CuesEditAction::None => (),
@@ -379,20 +387,29 @@ impl State {
     fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui) {
         // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
         // of the function, we assign `copied_cue` back to the actual cue.
-        let (mut copied_cue, cue_ind, _dca_ind) =
-            if let CuesEditAction::EditDcaAssign { cue_ind, dca_ind } = self.cues_edit_action() {
-                let cue = self.cues().values().nth(*cue_ind).map(|cue| cue.clone());
-                if let Some(cue) = cue {
-                    (cue, *cue_ind, *dca_ind)
-                } else {
-                    log::warn!("Unable to get cue we are editing");
-                    return;
-                }
+        let (mut copied_cue, cue_ind, _dca_ind) = if let CuesEditAction::EditDcaAssign {
+            cue_ind,
+            dca_ind,
+            original_dca_name: _,
+        } = self.cues_edit_action()
+        {
+            let cue = self.cues().values().nth(*cue_ind).map(|cue| cue.clone());
+            if let Some(cue) = cue {
+                (cue, *cue_ind, *dca_ind)
             } else {
-                log::warn!("Edit dca assign popup called but we are not editing a dca");
+                log::warn!("Unable to get cue we are editing");
                 return;
-            };
-        if let CuesEditAction::EditDcaAssign { cue_ind, dca_ind } = self.cues_edit_action() {
+            }
+        } else {
+            log::warn!("Edit dca assign popup called but we are not editing a dca");
+            return;
+        };
+        if let CuesEditAction::EditDcaAssign {
+            cue_ind,
+            dca_ind,
+            original_dca_name: _,
+        } = self.cues_edit_action()
+        {
             egui::Window::new("Edit DCA Assignments")
                 .title_bar(false)
                 .show(ui.ctx(), |ui| {
