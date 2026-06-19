@@ -90,7 +90,7 @@ impl eframe::App for State {
     }
 }
 
-/// UI
+/// UI: cues
 impl State {
     // TODO: Extract stuff into separate functions
     /// Draw the UI of the area that shows the cues and DCAs
@@ -478,20 +478,24 @@ impl State {
         };
         *actual_cue = copied_cue;
     }
+}
+
+/// UI: file
+impl State {
     /// Draw the UI of the file screen
     fn file_ui(&mut self, ui: &mut egui::Ui) {
         if self.file_is_idle() {
             ui.horizontal(|ui| {
                 if ui.button("Save as").clicked() {
-                    self.save_as();
+                    self.file_save_as();
                 }
                 if ui.button("Load").clicked() {
-                    self.load();
+                    self.file_load();
                 }
             });
         } else {
             if ui.button("Cancel").clicked() {
-                self.cancel_file_dialog();
+                self.file_cancel_dialog();
             }
         }
     }
