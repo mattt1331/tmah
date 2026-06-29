@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 #[derive(Default, PartialEq)]
 pub enum UiScreen {
     #[default]
-    Cues,
     File,
+    Cues,
     Board,
 }
 
@@ -43,19 +43,19 @@ impl eframe::App for State {
             // Create the top menu bar and draw its buttons
             ui.horizontal(|ui| {
                 ui.heading("miq-v2");
-                ui.selectable_value(&mut self.ui_screen, UiScreen::Cues, "Cues");
                 ui.selectable_value(&mut self.ui_screen, UiScreen::File, "File");
+                ui.selectable_value(&mut self.ui_screen, UiScreen::Cues, "Cues");
                 ui.selectable_value(&mut self.ui_screen, UiScreen::Board, "Board");
             });
             ui.add_space(10.0);
             // Draw the main area
             match self.ui_screen {
-                UiScreen::Cues => {
-                    self.cues_ui(ui);
-                }
                 UiScreen::File => {
                     ui.heading("File");
                     self.file_ui(ui);
+                }
+                UiScreen::Cues => {
+                    self.cues_ui(ui);
                 }
                 UiScreen::Board => {
                     // Dropdown box to select connection
