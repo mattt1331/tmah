@@ -3,8 +3,11 @@
 // Types used by this module to represent data common to all boards
 mod data;
 pub use data::{BoardEdit, Channel, Dca, Decibels};
+// Library of `BoardEdit` to message and vice versa (low level api)
+mod board_messages;
 
 mod m7cl_midi;
+//mod generic_generic_midi;
 
 /// A generic connection. Implemented by each board
 pub trait Connectable {
