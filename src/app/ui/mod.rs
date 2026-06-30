@@ -69,8 +69,13 @@ impl eframe::App for State {
                             );
                             ui.selectable_value(
                                 &mut self.connection_ui,
-                                board::Connections::M7CLMidi,
-                                "M7CL over MIDI",
+                                board::Connections::YamahaM7CLMidi,
+                                "Yamaha M7CL over MIDI",
+                            );
+                            ui.selectable_value(
+                                &mut self.connection_ui,
+                                board::Connections::AllenAndHeathSQ7Midi,
+                                "Allen and Heath SQ7 over MIDI",
                             );
                         });
                     // Button to activate selected connection

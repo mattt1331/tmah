@@ -6,16 +6,11 @@ pub use data::{BoardEdit, Channel, Dca, Decibels};
 // Library of `BoardEdit` to message and vice versa (low level api)
 mod board_messages;
 
-mod m7cl_midi;
-//mod generic_generic_midi;
+mod generic_generic_midi;
 
-/// A generic connection. Implemented by each board
+/// A generic connection. Implemented by each board. This, in combination with `Connections`, is
+/// this module's public api.
 pub trait Connectable {
-    /// Create a new connection object of this type
-    fn new() -> Self
-    where
-        Self: Sized;
-
     /// The number of channels this board has
     fn num_channels(&self) -> u8;
     /// The number of DCAs this board has
@@ -42,7 +37,8 @@ pub trait Connectable {
 pub enum Connections {
     #[default]
     None,
-    M7CLMidi,
+    YamahaM7CLMidi,
+    AllenAndHeathSQ7Midi,
 }
 
 impl Connections {
@@ -50,7 +46,12 @@ impl Connections {
     pub fn construct(self) -> Box<dyn Connectable> {
         match self {
             Connections::None => Box::new(NoConnection::new()),
-            Connections::M7CLMidi => Box::new(m7cl_midi::M7CLMidi::new()),
+            Connections::YamahaM7CLMidi => Box::new(generic_generic_midi::GenericGenericMidi::new(
+                board_messages::YamahaM7CLMidi,
+            )),
+            Connections::AllenAndHeathSQ7Midi => Box::new(
+                generic_generic_midi::GenericGenericMidi::new(board_messages::AHSQ7Midi),
+            ),
         }
     }
 }
@@ -62,8 +63,8 @@ pub struct NoConnection {
     num_dcas_ui: String,
     num_channels_ui: String,
 }
-impl Connectable for NoConnection {
-    fn new() -> Self {
+impl NoConnection {
+    pub fn new() -> Self {
         NoConnection {
             num_dcas: 8,
             num_channels: 20,
@@ -71,6 +72,8 @@ impl Connectable for NoConnection {
             num_channels_ui: "20".to_string(),
         }
     }
+}
+impl Connectable for NoConnection {
     fn num_channels(&self) -> u8 {
         self.num_channels
     }

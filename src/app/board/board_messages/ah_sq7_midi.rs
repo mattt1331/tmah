@@ -1,8 +1,8 @@
 //! An adaptor between `BoardEdit` and the MIDI messages that the Allen and Heath SQ7 sends and
-//! recieves through the USB port on its back panel.
+//! recieves through the USB port on its back panel or the Ethernet port over TCP.
 //! See the M7CL for disscussion about the choice of types here.
 
-use super::{BoardEditAdaptor, BoardEdit};
+use super::{BoardEdit, BoardEditAdaptor};
 
 pub struct AHSQ7Midi;
 

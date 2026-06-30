@@ -1,5 +1,7 @@
-//! Contains implementation for connecting to the Yamaha M7CL over MIDI
+//! Contains implementation for connecting a generic board over MIDI. Details for each board are
+//! provided by a `board_messages::BoardEditAdaptor`.
 
+use super::board_messages::BoardEditAdaptor;
 use crate::app::{ChannelNames, Cue};
 use eframe::egui::{self, Color32, RichText, Ui};
 use midir::{self, MidiOutput, MidiOutputConnection, MidiOutputPort};
@@ -11,13 +13,17 @@ const DEFAULT_NUM_CH_CONTROL: u8 = 32;
 /// Name of the application in MIDI
 const MIDI_CLIENT_NAME: &str = "miq-v2";
 /// Certain MIDI implementations have a name for the connection
-const MIDI_CONNECTION_NAME: &str = "miq-v2 connection to Yamaha M7CL";
-/// The MIDI channel index (ch1 = 0) to send on. MUST BE LESS THAN 16
-const MIDI_CHANNEL_IND: u8 = 0;
+const MIDI_CONNECTION_NAME: &str = "miq-v2 connection over MIDI";
 
-/// A connection over MIDI to an M7CL.
-pub struct M7CLMidi {
+/// A connection over MIDI to some board.
+pub struct GenericGenericMidi<Adaptor>
+where
+    Adaptor: BoardEditAdaptor,
+{
     conn: ConnectionState,
+    /// Something which translates `BoardEdit`s into MIDI messages which can be sent over the
+    /// connection.
+    adaptor: Adaptor,
     /// If this is true, logic will assume that no one else touches the board apart from this.
     /// This lets it send fewer commands and is a hack until we implement receiving state update
     /// messages from the board.
@@ -39,27 +45,38 @@ enum ConnectionState {
     Connected(MidiOutputConnection),
 }
 
-impl super::Connectable for M7CLMidi {
-    fn new() -> Self {
+impl<Adaptor> GenericGenericMidi<Adaptor>
+where
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+{
+    pub fn new(adaptor: Adaptor) -> Self {
         let midi = MidiOutput::new(MIDI_CLIENT_NAME);
         match midi {
             Ok(midi) => {
                 let ports = midi.ports();
-                M7CLMidi {
+                GenericGenericMidi {
                     conn: ConnectionState::YesMidiNoConnection(midi, ports, None),
+                    adaptor,
                     no_touchy: DEFAULT_NO_TOUCHY,
                     board_state: None,
                     num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
                 }
             }
-            Err(init_error) => M7CLMidi {
+            Err(init_error) => GenericGenericMidi {
                 conn: ConnectionState::NoMidi(init_error),
+                adaptor,
                 no_touchy: DEFAULT_NO_TOUCHY,
                 board_state: None,
                 num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
             },
         }
     }
+}
+
+impl<Adaptor> super::Connectable for GenericGenericMidi<Adaptor>
+where
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+{
     fn num_channels(&self) -> u8 {
         self.num_channels_controlled
     }
@@ -84,7 +101,10 @@ impl super::Connectable for M7CLMidi {
     fn fire_channel_names(&mut self, names: &ChannelNames) {
         if let ConnectionState::Connected(..) = self.conn {
             for (ch_ind, name) in names.iterator() {
-                self.send_channel_name(*ch_ind, name);
+                self.fire_board_edit(super::BoardEdit::ChannelName(
+                    super::Channel::from_index(*ch_ind),
+                    name.to_string(),
+                ));
             }
         } else {
             log::error!("`fire_channel_names` called but we are not connected");
@@ -153,7 +173,10 @@ impl super::Connectable for M7CLMidi {
 
 /// For external use
 /// (part of med level API)
-impl M7CLMidi {
+impl<Adaptor> GenericGenericMidi<Adaptor>
+where
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+{
     /// For a connection which failed to initialize MIDI, retry initializing
     pub fn try_init_midi(&mut self) {
         if let ConnectionState::NoMidi(_) = self.conn {
@@ -235,7 +258,10 @@ impl M7CLMidi {
 
 /// For internal use
 /// Old API (low + med level)
-impl M7CLMidi {
+impl<Adaptor: BoardEditAdaptor> GenericGenericMidi<Adaptor>
+where
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+{
     /// Fire the provided cue, taking into account the differences between it and `prev_cue` and
     /// updates cached board state
     fn fire_cue_diff(&mut self, cue: &Cue, prev_cue: &Cue) {
@@ -263,7 +289,10 @@ impl M7CLMidi {
 }
 /// Improved API
 /// New API (low level)
-impl M7CLMidi {
+impl<Adaptor> GenericGenericMidi<Adaptor>
+where
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+{
     // move into trait default impl
     fn fire_diff(&mut self, diff: Vec<super::BoardEdit>) {
         for edit in diff {
@@ -271,170 +300,21 @@ impl M7CLMidi {
         }
     }
     fn fire_board_edit(&mut self, edit: super::BoardEdit) {
-        use super::BoardEdit as BE;
-        match edit {
-            BE::ChannelMute(ch, mute) => self.send_ch_on(ch.index(), !mute),
-            BE::ChannelDcaAssign(ch, dca, assign) => {
-                self.send_ch_dca(ch.index(), dca.index(), assign)
+        let message = self.adaptor.send_board_edit(edit);
+        let message: Vec<Vec<u8>> = match message {
+            Ok(msg) => msg,
+            Err(err) => {
+                log::error!("Failed to convert BoardEdit to midi message: {err:?}");
+                return;
             }
-            BE::ChannelName(ch, name) => self.send_channel_name(ch.index(), &name),
-            BE::DcaLevel(_dca, _level) => unimplemented!(),
-            BE::DcaName(dca, name) => self.send_dca_name(dca.index(), &name),
+        };
+        for midi_message in message {
+            self.send(&midi_message);
         }
     }
 }
 /// For internal use
-/// (part of low level API)
-impl M7CLMidi {
-    /// Send the messages to turn on/off the given channel
-    fn send_ch_on(&mut self, ch_ind: u8, on: bool) {
-        let val = if on {
-            0b1111_1111_1111_1111
-        } else {
-            0b0000_0000_0000_0000
-        };
-        self.send_nrpn(0x05b6 + (ch_ind as u16), val);
-    }
-    /// Send the messages to assign/unassign the given channel from the given dca
-    fn send_ch_dca(&mut self, ch_ind: u8, dca_ind: u8, assigned: bool) {
-        let data = if assigned { 0x01 } else { 0x00 };
-        self.send_prm_sysex(
-            0x003f,
-            dca_ind as u16,
-            ch_ind as u16,
-            [0x00, 0x00, 0x00, 0x00, data],
-        );
-    }
-    /// Send the messages to set the name of the given DCA to the given value. The name must be
-    /// ASCII and can be at most eight characters.
-    fn send_dca_name(&mut self, dca_ind: u8, name: &str) {
-        let name = name.as_bytes();
-        let data_1: [u8; 5] = [
-            0x00,
-            *name.first().unwrap_or(&0x00),
-            *name.get(1).unwrap_or(&0x00),
-            *name.get(2).unwrap_or(&0x00),
-            *name.get(3).unwrap_or(&0x00),
-        ];
-        let data_2: [u8; 5] = [
-            0x00,
-            *name.get(4).unwrap_or(&0x00),
-            *name.get(5).unwrap_or(&0x00),
-            *name.get(6).unwrap_or(&0x00),
-            *name.get(7).unwrap_or(&0x00),
-        ];
-        // kDCAName kNameShort1
-        self.send_prm_sysex(0x007b, 0x0000, dca_ind.into(), data_1);
-        // kDCAName kNameShort2
-        self.send_prm_sysex(0x007b, 0x0001, dca_ind.into(), data_2);
-    }
-    /// Send the messages to set the name of the given channel to the given value. The name must be
-    /// ASCII and can be at most eight characters.
-    fn send_channel_name(&mut self, channel_ind: u8, name: &str) {
-        let name = name.as_bytes();
-        let data_1: [u8; 5] = [
-            0x00,
-            *name.first().unwrap_or(&0x00),
-            *name.get(1).unwrap_or(&0x00),
-            *name.get(2).unwrap_or(&0x00),
-            *name.get(3).unwrap_or(&0x00),
-        ];
-        let data_2: [u8; 5] = [
-            0x00,
-            *name.get(4).unwrap_or(&0x00),
-            *name.get(5).unwrap_or(&0x00),
-            *name.get(6).unwrap_or(&0x00),
-            *name.get(7).unwrap_or(&0x00),
-        ];
-        // kDCAName kNameShort1
-        self.send_prm_sysex(0x0113, 0x0000, channel_ind.into(), data_1);
-        // kDCAName kNameShort2
-        self.send_prm_sysex(0x0113, 0x0001, channel_ind.into(), data_2);
-    }
-    /// Send the sequence of midi messages which corresponds to the given NRPN control change
-    /// Note: takes normal, not midi, bytes
-    fn send_nrpn(&mut self, param: u16, val: u16) {
-        let (param_msb, param_lsb) = Self::two_byte_midi_pack(param);
-        let (val_msb, val_lsb) = Self::two_byte_midi_pack(val);
-        self.send(&[
-            // Control change + channel
-            0b1011_0000 | MIDI_CHANNEL_IND,
-            // NRPN Parameter MSB
-            0x63,
-            // NRPN Parameter MSB value
-            param_msb,
-        ]);
-        self.send(&[
-            // Control change + channel
-            0b1011_0000 | MIDI_CHANNEL_IND,
-            // NRPN Parameter LSB
-            0x62,
-            // NRPN Parameter LSB value
-            param_lsb,
-        ]);
-        self.send(&[
-            // Control change + channel
-            0b1011_0000 | MIDI_CHANNEL_IND,
-            // NRPN Data MSB
-            0x06,
-            // NRPN Data MSB value
-            val_msb,
-        ]);
-        self.send(&[
-            // Control change + channel
-            0b1011_0000 | MIDI_CHANNEL_IND,
-            // NRPN Data LSB
-            0x26,
-            // NRPN Data LSB value
-            val_lsb,
-        ]);
-    }
-    /// Send the midi sysex message to change parameter as given
-    /// Note: takes normal, not midi, bytes
-    fn send_prm_sysex(&mut self, elem: u16, ind: u16, cc: u16, dd: [u8; 5]) {
-        let (e1, e2) = Self::two_byte_midi_pack(elem);
-        let (i1, i2) = Self::two_byte_midi_pack(ind);
-        let (c1, c2) = Self::two_byte_midi_pack(cc);
-        self.send(&[
-            // Sysex
-            0xf0,
-            // Manufacturer id (Yamaha)
-            0x43,
-            // Sub status + channel
-            0b0001_0000 | MIDI_CHANNEL_IND,
-            // Group id (Yamaha: digital mixer)
-            0x3e,
-            // Model id (M7CL)
-            0x11,
-            // Data category (parameters, not dump or lib or meter or whatever)
-            0x01,
-            // Element
-            e1,
-            e2,
-            // Index
-            i1,
-            i2,
-            // Channel
-            c1,
-            c2,
-            // Data
-            ((dd[0] << 4) | (dd[1] >> 4)) & 0b0111_1111,
-            ((dd[1] << 3) | (dd[2] >> 5)) & 0b0111_1111,
-            ((dd[2] << 2) | (dd[3] >> 6)) & 0b0111_1111,
-            ((dd[3] << 1) | (dd[4] >> 7)) & 0b0111_1111,
-            dd[4] & 0b0111_1111,
-            // End sysex
-            0xf7,
-        ]);
-    }
-    /// Takes two normal bytes and packs them into two midi bytes. Note that this is lossy as midi
-    /// bytes are 7 bits.
-    fn two_byte_midi_pack(input: u16) -> (u8, u8) {
-        (
-            ((input >> 7) & 0b0111_1111) as u8,
-            (input & 0b0111_1111) as u8,
-        )
-    }
+impl<Adaptor: BoardEditAdaptor> GenericGenericMidi<Adaptor> {
     /// Send the provided midi message
     /// Note: takes 7-bit midi bytes, not normal bytes
     fn send(&mut self, message: &[u8]) {

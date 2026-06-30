@@ -4,8 +4,8 @@ mod board;
 mod file;
 mod ui;
 
+use board::Channel;
 pub use board::Decibels;
-use board::{Channel, Connectable};
 
 use std::collections::{BTreeMap, BTreeSet};
 

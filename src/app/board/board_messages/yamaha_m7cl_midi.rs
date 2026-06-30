@@ -5,7 +5,7 @@
 //! (FIX pls, the messages cannot be combined into one stream because some implementations (eg alsa)
 //! do not function correctly if multiple messages are `send`ed in one go).
 
-use super::{BoardEditAdaptor, BoardEdit};
+use super::{BoardEdit, BoardEditAdaptor};
 
 pub struct YamahaM7CLMidi;
 
@@ -35,7 +35,7 @@ impl BoardEditAdaptor for YamahaM7CLMidi {
 const MIDI_CHANNEL_IND: u8 = 0;
 
 /// Send the messages to turn on/off the given channel
-fn send_ch_on(ch_ind: u8, on: bool) -> Vec<MidiMessage>{
+fn send_ch_on(ch_ind: u8, on: bool) -> Vec<MidiMessage> {
     let val = if on {
         0b1111_1111_1111_1111
     } else {
@@ -75,7 +75,7 @@ fn send_dca_name(dca_ind: u8, name: &str) -> Vec<MidiMessage> {
         // kDCAName kNameShort1
         send_prm_sysex(0x007b, 0x0000, dca_ind.into(), data_1),
         // kDCAName kNameShort2
-        send_prm_sysex(0x007b, 0x0001, dca_ind.into(), data_2)
+        send_prm_sysex(0x007b, 0x0001, dca_ind.into(), data_2),
     ]
 }
 /// Send the messages to set the name of the given channel to the given value. The name must be
@@ -100,7 +100,7 @@ fn send_channel_name(channel_ind: u8, name: &str) -> Vec<MidiMessage> {
         // kDCAName kNameShort1
         send_prm_sysex(0x0113, 0x0000, channel_ind.into(), data_1),
         // kDCAName kNameShort2
-        send_prm_sysex(0x0113, 0x0001, channel_ind.into(), data_2)
+        send_prm_sysex(0x0113, 0x0001, channel_ind.into(), data_2),
     ]
 }
 /// Send the sequence of midi messages which corresponds to the given NRPN control change
@@ -140,7 +140,7 @@ fn send_nrpn(param: u16, val: u16) -> Vec<MidiMessage> {
             0x26,
             // NRPN Data LSB value
             val_lsb,
-        ]
+        ],
     ]
 }
 /// Send the midi sysex message to change parameter as given
