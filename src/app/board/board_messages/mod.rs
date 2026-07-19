@@ -19,10 +19,8 @@ pub enum SendError {
     NotSupported,
 }
 
-mod ah_sq7_midi;
 mod yamaha_m7cl_midi;
 
-pub use ah_sq7_midi::AHSQ7Midi;
 pub use yamaha_m7cl_midi::YamahaM7CLMidi;
 
 mod util_midi;

@@ -38,7 +38,6 @@ pub enum Connections {
     #[default]
     None,
     YamahaM7CLMidi,
-    AllenAndHeathSQ7Midi,
 }
 
 impl Connections {
@@ -49,9 +48,6 @@ impl Connections {
             Connections::YamahaM7CLMidi => Box::new(generic_generic_midi::GenericGenericMidi::new(
                 board_messages::YamahaM7CLMidi,
             )),
-            Connections::AllenAndHeathSQ7Midi => Box::new(
-                generic_generic_midi::GenericGenericMidi::new(board_messages::AHSQ7Midi),
-            ),
         }
     }
 }
