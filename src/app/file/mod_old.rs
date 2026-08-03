@@ -27,6 +27,12 @@ pub enum FileState {
     LoadingFile(std::sync::mpsc::Receiver<FileData>),
 }
 
+#[derive(Default)]
+pub struct FileState {
+    loaded_file: Option<FileSource>,
+    load_file_state: Option<LoadFileState>,
+}
+
 /// Managing file-related state
 impl State {
     /// Is the load screen idle, or is some dialog up? Note: this must be called because it also

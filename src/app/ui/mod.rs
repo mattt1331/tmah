@@ -484,19 +484,31 @@ impl State {
 impl State {
     /// Draw the UI of the file screen
     fn file_ui(&mut self, ui: &mut egui::Ui) {
-        if self.file_is_idle() {
-            ui.horizontal(|ui| {
-                if ui.button("Save as").clicked() {
-                    self.file_save_as();
-                }
-                if ui.button("Load").clicked() {
-                    self.file_load();
-                }
-            });
-        } else {
-            if ui.button("Cancel").clicked() {
-                self.file_cancel_dialog();
+        let is_file_io_idle = self.file_state.tick_io_and_is_idle();
+        // What file is loaded?
+        match self.file_state.loaded_file() {
+            Some(file) => {
+                match file {
+                    super::file::FileSource::LocalFile(_) => ui.label("local file"),
+                    super::file::FileSource::GoogleSheet(_) => ui.label("google sheet"),
+                };
+                // Button to save to currently loaded file
+                ui.add_enabled(is_file_io_idle, egui::Button::new("Save"));
+            }
+            None => {
+                ui.label("no file loaded");
             }
         }
+        // Buttons to load/save to files
+        ui.heading("Local file");
+        ui.horizontal(|ui| {
+            ui.button("Load local file");
+            ui.button("Save as new file");
+        });
+        ui.heading("Google sheet");
+        ui.horizontal(|ui| {
+            ui.button("Load google sheet");
+            ui.button("Save to google sheet");
+        });
     }
 }
