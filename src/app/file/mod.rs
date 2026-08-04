@@ -23,7 +23,14 @@ impl FileState {
     pub fn tick_io_and_is_idle(&mut self) -> bool {
         match &mut self.io_state {
             FileIoState::Idle => true,
-            FileIoState::Saving(save_state) => {
+            FileIoState::SavingLocalFile(save_state) => {
+                let is_done = save_state.poll_saved();
+                if is_done {
+                    self.io_state = FileIoState::Idle;
+                }
+                is_done
+            }
+            FileIoState::SavingGoogleSheet(save_state) => {
                 let is_done = save_state.poll_saved();
                 if is_done {
                     self.io_state = FileIoState::Idle;
@@ -42,11 +49,11 @@ impl FileState {
             Some(file) => match file {
                 FileSource::LocalFile(file) => {
                     let save_file_state = local_file::save(&file, file_data);
-                    self.io_state = FileIoState::Saving(SaveFileState::SavingLocalFile(save_file_state));
+                    self.io_state = FileIoState::SavingLocalFile(save_file_state);
                 }
                 FileSource::GoogleSheet(file) => {
                     let save_file_state = google_sheet::save(&file, file_data);
-                    self.io_state = FileIoState::Saving(SaveFileState::SavingGoogleSheet(save_file_state));
+                    self.io_state = FileIoState::SavingGoogleSheet(save_file_state);
                 }
             }
             None => log::warn!("Tried to save file but no file is loaded to save to"),
@@ -64,21 +71,8 @@ pub enum FileSource {
 enum FileIoState {
     #[default]
     Idle,
-    Saving(SaveFileState),
-}
-
-enum SaveFileState {
     SavingLocalFile(local_file::SaveFileState),
     SavingGoogleSheet(google_sheet::SaveFileState),
-}
-impl SaveFileState {
-    /// Check if we are done saving.
-    fn poll_saved(&mut self) -> bool {
-        match self {
-            SaveFileState::SavingLocalFile(save_state) => save_state.poll_saved(),
-            SaveFileState::SavingGoogleSheet(save_state) => save_state.poll_saved(),
-        }
-    }
 }
 
 /// Data saved in the show file
