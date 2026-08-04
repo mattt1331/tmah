@@ -1,16 +1,65 @@
 //! Saving to and loading from a local file
 
+use std::sync::mpsc::{self, Receiver};
+use super::FileData;
 
 /// A local file which we are loading to/from
 #[cfg(not(target_arch = "wasm32"))]
 pub struct FileSource {
     path: std::path::PathBuf,
 }
+
+/// Stores the progress of loading a local file
+pub struct LoadFileState {
+    /// Receiver which will receive the file
+    rx: Receiver<FileData>
+}
+impl LoadFileState {
+    /// Poll whether we are done loading the file. If we are still waiting, `None`. If we are done,
+    /// `Some` with either the file or an oops
+    pub fn poll_loaded(&mut self) -> Option<Result<FileData, ()>> {
+        match self.rx.try_recv() {
+            Ok(file_data) => Some(Ok(file_data)),
+            Err(err) => match err {
+                // Nothing sent to us yet
+                mpsc::TryRecvError::Empty => None,
+                // Loader thread failed/died
+                mpsc::TryRecvError::Disconnected => Some(Err(())),
+            }
+        }
+    }
+}
+
+/// Begin loading a local file
+pub fn begin_load() -> LoadFileState {
+    let (tx, rx) = mpsc::channel();
+    super::crimes::execute_asynchronously(async move {
+        let file = rfd::AsyncFileDialog::new()
+            .add_filter("show file", &["ron"])
+            .set_directory("/")
+            .pick_file()
+            .await;
+        if let Some(file) = file {
+            let data = file.read().await;
+            let file_data = ron::de::from_bytes::<FileData>(&data);
+            match file_data {
+                Ok(file_data) => {
+                    let _ = tx.send(file_data);
+                }
+                Err(err) => log::error!("Failed to deserialize file data: {err}"),
+            };
+        } else {
+            log::info!("File picker dialog did not return a file");
+        }
+    });
+    LoadFileState { rx }
+}
+
 /// Stores the progress of saving to a local file
 #[cfg(not(target_arch = "wasm32"))]
 pub struct SaveFileState {
     /// The writer thread will message us once it is done writing
-    rx: std::sync::mpsc::Receiver<()>,
+    rx: Receiver<()>,
 }
 #[cfg(not(target_arch = "wasm32"))]
 impl SaveFileState {
@@ -20,8 +69,8 @@ impl SaveFileState {
             // Done writing
             Ok(()) => true,
             Err(err) => match err {
-                std::sync::mpsc::TryRecvError::Empty => false,
-                std::sync::mpsc::TryRecvError::Disconnected => {
+                mpsc::TryRecvError::Empty => false,
+                mpsc::TryRecvError::Disconnected => {
                     // IO thread must have crashed
                     log::error!("Failed to save file. IO thread probably crashed.");
                     // Return done so we can move on
@@ -35,7 +84,7 @@ impl SaveFileState {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn save(file: &FileSource, data: super::FileData) -> SaveFileState {
     let path = file.path.clone();
-    let (tx, rx) = std::sync::mpsc::channel();
+    let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         match data.serialize() {
             Ok(data) => {

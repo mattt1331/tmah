@@ -484,7 +484,7 @@ impl State {
 impl State {
     /// Draw the UI of the file screen
     fn file_ui(&mut self, ui: &mut egui::Ui) {
-        let is_file_io_idle = self.file_state.tick_io_and_is_idle();
+        let is_file_io_idle = self.file_tick_and_is_idle();
         // What file is loaded?
         match self.file_state.loaded_file() {
             Some(file) => {
@@ -502,7 +502,9 @@ impl State {
         // Buttons to load/save to files
         ui.heading("Local file");
         ui.horizontal(|ui| {
-            ui.button("Load local file");
+            if ui.add_enabled(is_file_io_idle, egui::Button::new("Load local file")).clicked() {
+                self.file_load_local();
+            }
             ui.button("Save as new file");
         });
         ui.heading("Google sheet");
