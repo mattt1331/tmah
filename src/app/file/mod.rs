@@ -160,7 +160,7 @@ impl FileState {
     }
     /// Save current program state to the currently loaded file. If the file type does not support
     /// writing, try the optionally provided closure.
-    pub fn save(&mut self, file_data: FileData, receiver: Option<impl FnOnce(String) -> ()>) {
+    pub fn save(&mut self, file_data: FileData, receiver: Option<impl FnOnce(String)>) {
         if !self.is_idle() {
             log::warn!("Tried to save but io is busy");
             return;
@@ -176,7 +176,9 @@ impl FileState {
                         if let Ok(data) = file_data.serialize() {
                             receiver(data);
                         } else {
-                            log::error!("Could not export to clipboard because data could not be serialized")
+                            log::error!(
+                                "Could not export to clipboard because data could not be serialized"
+                            )
                         }
                     } else {
                         log::error!(

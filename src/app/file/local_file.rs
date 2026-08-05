@@ -98,7 +98,8 @@ pub fn begin_save_as(file_data: FileData) -> SaveAsFileState {
                 } else {
                     log::info!("File picker dialog did not return a file");
                 }
-                tx.send(());
+                // We do not care about whether the other side is still listening
+                let _ = tx.send(());
             });
         }
         Err(err) => log::error!("Could not serialize file data: {err}"),
@@ -150,8 +151,9 @@ pub fn save(file: &FileSource, data: super::FileData) -> SaveFileState {
                 log::error!("Failed to serialize data.");
             }
         }
-        // Regardless of what happened, let the ui know we are done
-        tx.send(());
+        // Regardless of what happened, let the ui know we are done. We do not care if the ui
+        // actually receives this
+        let _ = tx.send(());
     });
     SaveFileState { rx }
 }
