@@ -79,7 +79,7 @@ impl SaveAsFileState {
 /// Begin saving program state as a file (open the file picker dialog to choose where to save it)
 pub fn begin_save_as(file_data: FileData) -> SaveAsFileState {
     let (tx, rx) = mpsc::channel();
-    let file_data = ron::to_string(&file_data);
+    let file_data = ron::ser::to_string_pretty(&file_data, ron::ser::PrettyConfig::default());
     match file_data {
         Ok(file_data) => {
             super::crimes::execute_asynchronously(async move {
@@ -163,7 +163,7 @@ pub struct FileSource;
 // FIXME: Stop pretending that the write succeeded and write code that actually represents
 // what's going on.
 #[cfg(target_arch = "wasm32")]
-struct SaveFileState;
+pub struct SaveFileState;
 #[cfg(target_arch = "wasm32")]
 impl SaveFileState {
     /// Poll whether we are done writing the file

@@ -518,7 +518,9 @@ impl State {
         ui.heading("Google sheet");
         ui.horizontal(|ui| {
             ui.button("Load google sheet");
-            ui.button("Save to google sheet");
+            if ui.button("Copy data to clipboard").clicked() {
+                self.file_to_clipboard(ui);
+            }
         });
     }
 }

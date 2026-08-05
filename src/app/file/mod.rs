@@ -8,6 +8,42 @@ mod local_file;
 // Saving to and loading from a google sheet
 mod google_sheet;
 
+/// Data saved in the show file
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct FileData {
+    cues: BTreeMap<CueNumber, Cue>,
+    channel_names: ChannelNames,
+}
+impl FileData {
+    /// Serializes data to RON as a string
+    fn serialize(&self) -> Result<String, ()> {
+        match ron::to_string(self) {
+            Ok(data) => Ok(data),
+            Err(err) => {
+                log::error!("Failed to serialize file data: {err}");
+                Err(())
+            }
+        }
+    }
+}
+/// Extracting/inserting data to save/saved data
+impl State {
+    /// Returns the data which will be saved in the show file
+    pub fn file_get_data(&self) -> FileData {
+        // Remember to update the load function as well
+        // Do that first pls
+        FileData {
+            cues: self.cues.clone(),
+            channel_names: self.ch_names.clone(),
+        }
+    }
+    /// Loads the given data (ie sets state equal to provided values)
+    pub fn file_load_data(&mut self, data: FileData) {
+        self.cues = data.cues;
+        self.ch_names = data.channel_names;
+    }
+}
+
 impl State {
     /// Commence loading a local file (put up the file picker)
     pub fn file_load_local(&mut self) {
@@ -32,13 +68,6 @@ impl State {
         match &mut self.file_state.io_state {
             FileIoState::Idle => true,
             FileIoState::SavingLocalFile(save_state) => {
-                let is_done = save_state.poll_saved();
-                if is_done {
-                    self.file_state.io_state = FileIoState::Idle;
-                }
-                is_done
-            }
-            FileIoState::SavingGoogleSheet(save_state) => {
                 let is_done = save_state.poll_saved();
                 if is_done {
                     self.file_state.io_state = FileIoState::Idle;
@@ -74,6 +103,26 @@ impl State {
             }
         }
     }
+    /// Saves (ctrl-s) the program state to the last loaded file. If last loaded file was a google
+    /// sheet (which we cannot write to), copy the data to the clipboard so the user can paste it
+    /// into the sheet manually. This takes a `Ui` so that it can copy to the clipboard; it does not
+    /// render anything.
+    pub fn file_save(&mut self, ui: &mut eframe::egui::Ui) {
+        let data = self.file_get_data();
+        // Note that the closure takes the ui reference
+        let clipboard_device = |data| {
+            ui.copy_text(data);
+        };
+        self.file_state.save(data, Some(clipboard_device));
+    }
+    /// Like `file_save`, but always exports to clipboard
+    pub fn file_to_clipboard(&mut self, ui: &mut eframe::egui::Ui) {
+        let data = self.file_get_data();
+        let clipboard_device = |data| {
+            ui.copy_text(data);
+        };
+        google_sheet::export(data, clipboard_device);
+    }
 }
 
 /// Represents what file we have loaded, if any, and the state of loading a new file if we are doing
@@ -90,8 +139,9 @@ impl FileState {
     pub fn loaded_file(&self) -> &Option<FileSource> {
         &self.loaded_file
     }
-    /// Save current program state to the currently loaded file
-    pub fn save(&mut self, file_data: FileData) {
+    /// Save current program state to the currently loaded file. If the file type does not support
+    /// writing, try the optionally provided closure.
+    pub fn save(&mut self, file_data: FileData, receiver: Option<impl FnOnce(String) -> ()>) {
         if !self.is_idle() {
             log::warn!("Tried to save but io is busy");
             return;
@@ -103,8 +153,13 @@ impl FileState {
                     self.io_state = FileIoState::SavingLocalFile(save_file_state);
                 }
                 FileSource::GoogleSheet(file) => {
-                    let save_file_state = google_sheet::save(file, file_data);
-                    self.io_state = FileIoState::SavingGoogleSheet(save_file_state);
+                    if let Some(receiver) = receiver {
+                        google_sheet::export(file_data, receiver);
+                    } else {
+                        log::error!(
+                            "Could not export to google sheet format because no receiver was provided. The function was probably called incorrectly."
+                        );
+                    }
                 }
             },
             None => log::warn!("Tried to save file but no file is loaded to save to"),
@@ -125,43 +180,6 @@ enum FileIoState {
     SavingLocalFile(local_file::SaveFileState),
     LoadingLocalFile(local_file::LoadFileState),
     SavingAsLocalFile(local_file::SaveAsFileState),
-    SavingGoogleSheet(google_sheet::SaveFileState),
-}
-
-/// Data saved in the show file
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct FileData {
-    cues: BTreeMap<CueNumber, Cue>,
-    channel_names: ChannelNames,
-}
-impl FileData {
-    /// Serializes data to RON as a string
-    fn serialize(&self) -> Result<String, ()> {
-        match ron::to_string(self) {
-            Ok(data) => Ok(data),
-            Err(err) => {
-                log::error!("Failed to serialize file data: {err}");
-                Err(())
-            }
-        }
-    }
-}
-/// Extracting/inserting data to save/saved data
-impl State {
-    /// Returns the data which will be saved in the show file
-    pub fn file_get_data(&self) -> FileData {
-        // Remember to update the load function as well
-        // Do that first pls
-        FileData {
-            cues: self.cues.clone(),
-            channel_names: self.ch_names.clone(),
-        }
-    }
-    /// Loads the given data (ie sets state equal to provided values)
-    pub fn file_load_data(&mut self, data: FileData) {
-        self.cues = data.cues;
-        self.ch_names = data.channel_names;
-    }
 }
 
 /// Contains "solution" for dealing with futures
