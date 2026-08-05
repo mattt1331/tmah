@@ -86,6 +86,15 @@ impl eframe::App for State {
                     self.connection.ui(ui);
                 }
             }
+
+            // Input
+            // ctrl-s to save
+            if ui
+                .ctx()
+                .input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::S))
+            {
+                self.file_save(ui);
+            }
         });
     }
 }
