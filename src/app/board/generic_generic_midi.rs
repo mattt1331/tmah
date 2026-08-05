@@ -132,7 +132,7 @@ where
             ConnectionState::YesMidiNoConnection(_, _, conn_err) => {
                 ui.label(RichText::new("MIDI initialized").color(Color32::GREEN));
                 // Dropdown to select MIDI output
-                egui::ComboBox::from_label("Select MIDI output corresponding to M7CL")
+                egui::ComboBox::from_label("Select MIDI output corresponding to board")
                     .selected_text("Ports")
                     .show_ui(ui, |ui| {
                         if let Ok(ports) = self.ports() {
