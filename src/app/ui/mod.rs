@@ -502,10 +502,18 @@ impl State {
         // Buttons to load/save to files
         ui.heading("Local file");
         ui.horizontal(|ui| {
-            if ui.add_enabled(is_file_io_idle, egui::Button::new("Load local file")).clicked() {
+            if ui
+                .add_enabled(is_file_io_idle, egui::Button::new("Load local file"))
+                .clicked()
+            {
                 self.file_load_local();
             }
-            ui.button("Save as new file");
+            if ui
+                .add_enabled(is_file_io_idle, egui::Button::new("Save as new file"))
+                .clicked()
+            {
+                self.file_save_as_local();
+            }
         });
         ui.heading("Google sheet");
         ui.horizontal(|ui| {

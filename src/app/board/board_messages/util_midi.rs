@@ -7,7 +7,7 @@ pub enum MidiMessage {
     NrpnDataMSB(U7),
     NrpnDataLSB(U7),
     /// The data does not contain the leading byte and trailing byte (F0 and F7)
-    Sysex(Vec<u8>)
+    Sysex(Vec<u8>),
 }
 
 impl MidiMessage {

@@ -1,4 +1,4 @@
-//! An adaptor between `BoardEdit` and the MIDI messages that the Yamaha M7CL sends and recieves
+//! An adaptor between `BoardEdit` and the MIDI messages that the Yamaha M7CL sends and receives
 //! through the pair of three-pin MIDI ports on its back panel.
 //! Multiple MIDI messages may need to be produced for a single `BoardEdit`. Consequently, the
 //! adaptor produces a `Vec` of `MidiMessage`s, which are themselves `Vec<u8>`. This is not optimal

@@ -1,7 +1,7 @@
-//! Module containing state for saving and loading files. 
+//! Module containing state for saving and loading files.
 
+use super::{ChannelNames, Cue, CueNumber, State};
 use std::collections::BTreeMap;
-use super::{CueNumber, Cue, ChannelNames, State};
 
 // Saving to and loading from a local file
 mod local_file;
@@ -15,6 +15,15 @@ impl State {
             self.file_state.io_state = FileIoState::LoadingLocalFile(local_file::begin_load());
         } else {
             log::error!("Cannot begin loading a local file because IO is busy");
+        }
+    }
+    /// Commence saving as a local file (put up the file picker so we can choose where to save it)
+    pub fn file_save_as_local(&mut self) {
+        if self.file_tick_and_is_idle() {
+            self.file_state.io_state =
+                FileIoState::SavingAsLocalFile(local_file::begin_save_as(self.file_get_data()))
+        } else {
+            log::error!("Cannot begin saving to a local file because IO is busy");
         }
     }
     /// Polls file IO, updates state (eg loads file) if needed, and returns whether IO is idle so we
@@ -51,10 +60,17 @@ impl State {
                             // We failed so we are done
                             true
                         }
-                    }
+                    },
                     // Not done yet
                     None => false,
                 }
+            }
+            FileIoState::SavingAsLocalFile(save_state) => {
+                let is_done = save_state.poll_saved();
+                if is_done {
+                    self.file_state.io_state = FileIoState::Idle;
+                }
+                is_done
             }
         }
     }
@@ -83,14 +99,14 @@ impl FileState {
         match &mut self.loaded_file {
             Some(file) => match file {
                 FileSource::LocalFile(file) => {
-                    let save_file_state = local_file::save(&file, file_data);
+                    let save_file_state = local_file::save(file, file_data);
                     self.io_state = FileIoState::SavingLocalFile(save_file_state);
                 }
                 FileSource::GoogleSheet(file) => {
-                    let save_file_state = google_sheet::save(&file, file_data);
+                    let save_file_state = google_sheet::save(file, file_data);
                     self.io_state = FileIoState::SavingGoogleSheet(save_file_state);
                 }
-            }
+            },
             None => log::warn!("Tried to save file but no file is loaded to save to"),
         }
     }
@@ -107,8 +123,9 @@ enum FileIoState {
     #[default]
     Idle,
     SavingLocalFile(local_file::SaveFileState),
+    LoadingLocalFile(local_file::LoadFileState),
+    SavingAsLocalFile(local_file::SaveAsFileState),
     SavingGoogleSheet(google_sheet::SaveFileState),
-    LoadingLocalFile(local_file::LoadFileState)
 }
 
 /// Data saved in the show file
@@ -132,7 +149,7 @@ impl FileData {
 /// Extracting/inserting data to save/saved data
 impl State {
     /// Returns the data which will be saved in the show file
-    pub fn file_data(&self) -> FileData {
+    pub fn file_get_data(&self) -> FileData {
         // Remember to update the load function as well
         // Do that first pls
         FileData {
@@ -150,14 +167,17 @@ impl State {
 /// Contains "solution" for dealing with futures
 mod crimes {
     // On WASM, it is illegal to block the main thread and it is illegal to block on a future. This
-    // could possibly be solved less awkwardly though so please FIX it at some point
+    // could possibly be solved less awkwardly though so please FIX it at some point.
     //
     // Browser: this application has ONE THREAD. You WILL NOT block on futures
     // YES CHEF
-    #[cfg(target_arch = "wasm32")]
-    pub use wasm_bindgen_futures::spawn_local as execute_asynchronously;
+    //
+    // This `wasm_bindgen_futures::spawn_local` function runs the future asap as a JavaScript
+    // promise.
     #[cfg(not(target_arch = "wasm32"))]
     pub use execute_in_thread as execute_asynchronously;
+    #[cfg(target_arch = "wasm32")]
+    pub use wasm_bindgen_futures::spawn_local as execute_asynchronously;
 
     /// On native platforms, spawn a thread which blocks on a future (ie executes it)
     pub fn execute_in_thread(future: impl Future + std::marker::Send + 'static) {

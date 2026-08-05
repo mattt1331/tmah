@@ -1,7 +1,7 @@
 //! Saving to and loading from a local file
 
-use std::sync::mpsc::{self, Receiver};
 use super::FileData;
+use std::sync::mpsc::{self, Receiver};
 
 /// A local file which we are loading to/from
 #[cfg(not(target_arch = "wasm32"))]
@@ -12,7 +12,7 @@ pub struct FileSource {
 /// Stores the progress of loading a local file
 pub struct LoadFileState {
     /// Receiver which will receive the file
-    rx: Receiver<FileData>
+    rx: Receiver<FileData>,
 }
 impl LoadFileState {
     /// Poll whether we are done loading the file. If we are still waiting, `None`. If we are done,
@@ -25,7 +25,7 @@ impl LoadFileState {
                 mpsc::TryRecvError::Empty => None,
                 // Loader thread failed/died
                 mpsc::TryRecvError::Disconnected => Some(Err(())),
-            }
+            },
         }
     }
 }
@@ -56,6 +56,61 @@ pub fn begin_load() -> LoadFileState {
 }
 
 /// Stores the progress of saving to a local file
+pub struct SaveAsFileState {
+    /// The file picker dialog thread will message us once it's done
+    rx: Receiver<()>,
+}
+impl SaveAsFileState {
+    /// Poll for whether we are done picking and saving the file
+    pub fn poll_saved(&mut self) -> bool {
+        match self.rx.try_recv() {
+            // Message received so we are done
+            Ok(()) => true,
+            Err(err) => match err {
+                // Message not received so we are still waiting
+                mpsc::TryRecvError::Empty => false,
+                // The thread either failed or died so we are done
+                mpsc::TryRecvError::Disconnected => true,
+            },
+        }
+    }
+}
+
+/// Begin saving program state as a file (open the file picker dialog to choose where to save it)
+pub fn begin_save_as(file_data: FileData) -> SaveAsFileState {
+    let (tx, rx) = mpsc::channel();
+    let file_data = ron::to_string(&file_data);
+    match file_data {
+        Ok(file_data) => {
+            super::crimes::execute_asynchronously(async move {
+                let file = rfd::AsyncFileDialog::new()
+                    .add_filter("show file", &["ron"])
+                    .set_file_name("showfile.ron")
+                    .set_directory("/")
+                    .save_file()
+                    .await;
+                if let Some(file) = file {
+                    let result = file.write(file_data.as_bytes()).await;
+                    match result {
+                        Ok(_) => log::info!("Good write"),
+                        Err(err) => log::warn!("Bad write: {err}"),
+                    }
+                } else {
+                    log::info!("File picker dialog did not return a file");
+                }
+                tx.send(());
+            });
+        }
+        Err(err) => log::error!("Could not serialize file data: {err}"),
+    }
+    SaveAsFileState { rx }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Here be garbage
+// ------------------------------------------------------------------------------------------------
+
+/// Stores the progress of saving to a local file
 #[cfg(not(target_arch = "wasm32"))]
 pub struct SaveFileState {
     /// The writer thread will message us once it is done writing
@@ -76,7 +131,7 @@ impl SaveFileState {
                     // Return done so we can move on
                     true
                 }
-            }
+            },
         }
     }
 }
@@ -87,12 +142,10 @@ pub fn save(file: &FileSource, data: super::FileData) -> SaveFileState {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         match data.serialize() {
-            Ok(data) => {
-                match std::fs::write(path, data) {
-                    Ok(_) => (),
-                    Err(err) => log::error!("Failed to write file: {err}"),
-                }
-            }
+            Ok(data) => match std::fs::write(path, data) {
+                Ok(_) => (),
+                Err(err) => log::error!("Failed to write file: {err}"),
+            },
             Err(_) => {
                 log::error!("Failed to serialize data.");
             }
@@ -102,11 +155,6 @@ pub fn save(file: &FileSource, data: super::FileData) -> SaveFileState {
     });
     SaveFileState { rx }
 }
-
-
-// ---------------------------------
-// Here be garbage
-// ---------------------------------
 
 #[cfg(target_arch = "wasm32")]
 pub struct FileSource;
