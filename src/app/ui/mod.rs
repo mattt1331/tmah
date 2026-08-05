@@ -490,7 +490,7 @@ impl State {
             Some(file) => {
                 match file {
                     super::file::FileSource::LocalFile(_) => ui.label("local file"),
-                    super::file::FileSource::GoogleSheet(_) => ui.label("google sheet"),
+                    super::file::FileSource::Clipboard => ui.label("clipboard"),
                 };
                 // Button to save to currently loaded file
                 ui.add_enabled(is_file_io_idle, egui::Button::new("Save"));
@@ -515,12 +515,18 @@ impl State {
                 self.file_save_as_local();
             }
         });
-        ui.heading("Google sheet");
+        ui.heading("Clipboard");
         ui.horizontal(|ui| {
-            ui.button("Load google sheet");
-            if ui.button("Copy data to clipboard").clicked() {
-                self.file_to_clipboard(ui);
+            ui.text_edit_singleline(self.file_state.ui_from_clipboard_buffer_mut());
+            if ui.button("Load from input field").clicked() {
+                self.file_try_load_from_clipboard_buffer();
+            }
+            if let Some(error) = self.file_state.ui_last_clipboard_error() {
+                ui.label(format!("{error}"));
             }
         });
+        if ui.button("Copy data to clipboard").clicked() {
+            self.file_to_clipboard(ui);
+        }
     }
 }

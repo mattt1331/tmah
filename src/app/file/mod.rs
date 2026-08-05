@@ -5,8 +5,6 @@ use std::collections::BTreeMap;
 
 // Saving to and loading from a local file
 mod local_file;
-// Saving to and loading from a google sheet
-mod google_sheet;
 
 /// Data saved in the show file
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -118,10 +116,23 @@ impl State {
     /// Like `file_save`, but always exports to clipboard
     pub fn file_to_clipboard(&mut self, ui: &mut eframe::egui::Ui) {
         let data = self.file_get_data();
-        let clipboard_device = |data| {
+        if let Ok(data) = data.serialize() {
             ui.copy_text(data);
-        };
-        google_sheet::export(data, clipboard_device);
+        } else {
+            log::error!("Could not serialize data")
+        }
+    }
+    /// Try to load a file from the input field that you can paste into
+    pub fn file_try_load_from_clipboard_buffer(&mut self) {
+        match ron::de::from_str(&self.file_state.ui_from_clipboard_buffer) {
+            Ok(file_data) => {
+                self.file_state.loaded_file = Some(FileSource::Clipboard);
+                self.file_state.ui_from_clipboard_buffer.clear();
+                self.file_state.ui_last_clipboard_error = None;
+                self.file_load_data(file_data);
+            }
+            Err(err) => self.file_state.ui_last_clipboard_error = Some(err),
+        }
     }
 }
 
@@ -131,6 +142,8 @@ impl State {
 pub struct FileState {
     loaded_file: Option<FileSource>,
     io_state: FileIoState,
+    ui_from_clipboard_buffer: String,
+    ui_last_clipboard_error: Option<ron::error::SpannedError>,
 }
 impl FileState {
     pub fn is_idle(&self) -> bool {
@@ -138,6 +151,12 @@ impl FileState {
     }
     pub fn loaded_file(&self) -> &Option<FileSource> {
         &self.loaded_file
+    }
+    pub fn ui_from_clipboard_buffer_mut(&mut self) -> &mut String {
+        &mut self.ui_from_clipboard_buffer
+    }
+    pub fn ui_last_clipboard_error(&self) -> &Option<ron::error::SpannedError> {
+        &self.ui_last_clipboard_error
     }
     /// Save current program state to the currently loaded file. If the file type does not support
     /// writing, try the optionally provided closure.
@@ -152,12 +171,16 @@ impl FileState {
                     let save_file_state = local_file::save(file, file_data);
                     self.io_state = FileIoState::SavingLocalFile(save_file_state);
                 }
-                FileSource::GoogleSheet(file) => {
+                FileSource::Clipboard => {
                     if let Some(receiver) = receiver {
-                        google_sheet::export(file_data, receiver);
+                        if let Ok(data) = file_data.serialize() {
+                            receiver(data);
+                        } else {
+                            log::error!("Could not export to clipboard because data could not be serialized")
+                        }
                     } else {
                         log::error!(
-                            "Could not export to google sheet format because no receiver was provided. The function was probably called incorrectly."
+                            "Could not export to clipboard because no receiver was provided. The function was probably called incorrectly."
                         );
                     }
                 }
@@ -170,7 +193,7 @@ impl FileState {
 /// The different places a file can come from.
 pub enum FileSource {
     LocalFile(local_file::FileSource),
-    GoogleSheet(google_sheet::FileSource),
+    Clipboard,
 }
 
 #[derive(Default)]
