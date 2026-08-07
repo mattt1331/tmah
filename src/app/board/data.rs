@@ -31,7 +31,7 @@ impl Channel {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Represents a DCA
 pub struct Dca {
     index: u8,

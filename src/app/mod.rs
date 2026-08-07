@@ -421,6 +421,9 @@ impl DcaState {
     fn edit_name(&mut self) -> &mut Option<String> {
         &mut self.name
     }
+    fn level(&self) -> &Option<Decibels> {
+        &self.level
+    }
     fn assigned(&self) -> &BTreeSet<Channel> {
         &self.assigned
     }

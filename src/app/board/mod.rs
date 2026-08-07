@@ -5,6 +5,8 @@ mod data;
 pub use data::{BoardEdit, Channel, Dca, Decibels};
 // Library of `BoardEdit` to message and vice versa (low level api)
 mod board_messages;
+// System for tracking the state of the board
+mod board_state_cache;
 
 mod generic_generic_midi;
 
