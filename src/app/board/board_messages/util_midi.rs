@@ -68,14 +68,13 @@ impl MidiMessage {
 /// A wrapper around `u8` which ensures that the topmost bit is always zero.
 #[derive(Clone)]
 pub struct U7(u8);
-// The `u8` stored in the struct need not have the top bit be zero, but ensure that if you are
-// getting a u8 out of it, the u8 must have the top bit be zero.
+// The `u8` stored in the struct must have the top bit be zero.
 impl U7 {
     pub fn from_u8(input: u8) -> Self {
-        U7(input)
+        U7(input & 0b0111_1111)
     }
     pub fn into_u8(self) -> u8 {
-        self.0 & 0b0111_1111
+        self.0
     }
 }
 impl From<U7> for u8 {
