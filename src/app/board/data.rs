@@ -1,7 +1,9 @@
 //! Contains types used by `mod board` to represent data common to all boards
 
 /// Represents a channel
-#[derive(Clone, PartialEq, PartialOrd, Ord, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, PartialEq, PartialOrd, Ord, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub struct Channel {
     index: u8,
 }
@@ -31,7 +33,7 @@ impl Channel {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 /// Represents a DCA
 pub struct Dca {
     index: u8,
@@ -63,7 +65,7 @@ impl Dca {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 /// Represents all supported board edit operations.
 pub enum BoardEdit {
     /// Edit to a channel's mute. If true, the channel is now muted.
