@@ -96,6 +96,8 @@ impl eframe::App for State {
                 self.file_save(ui);
             }
         });
+        // Do work that gets done each frame
+        self.each_frame();
     }
 }
 

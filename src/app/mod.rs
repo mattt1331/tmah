@@ -94,6 +94,11 @@ impl State {
 }
 /// Methods with additional logic
 impl State {
+    /// Should get called every frame.
+    pub fn each_frame(&mut self) {
+        // Each connection is allowed to do some work each frame
+        self.connection.heartbeat();
+    }
     /// Adds the given cue at the given number.
     /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {

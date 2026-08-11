@@ -1,6 +1,7 @@
 //! Contains types used by `mod board` to represent data common to all boards
 
 /// Represents a channel
+// FIXME: Make Channel and Dca be Copy, not Clone
 #[derive(
     Clone, PartialEq, PartialOrd, Ord, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
 )]

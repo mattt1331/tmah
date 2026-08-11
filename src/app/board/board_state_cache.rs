@@ -234,8 +234,8 @@ impl BoardStateCache {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::DcaState;
+    use super::*;
 
     /// Returns a `DcaState` with the channels given by the provided indices assigned
     fn dca_with_chs(chs: &[u8]) -> DcaState {

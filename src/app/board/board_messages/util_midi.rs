@@ -68,16 +68,25 @@ impl MidiMessage {
         match bytes[0] {
             0b1111_0000 => {
                 if bytes[bytes.len() - 1] != 0b1111_0111 {
-                    log::error!("Tried to parse sysex which is missing the end byte: {:#?}", bytes);
+                    log::error!(
+                        "Tried to parse sysex which is missing the end byte: {:#?}",
+                        bytes
+                    );
                     return None;
                 }
-                Some((None, MidiMessage::Sysex(bytes[1..bytes.len()-1].iter().copied().collect())))
+                Some((
+                    None,
+                    MidiMessage::Sysex(bytes[1..bytes.len() - 1].iter().copied().collect()),
+                ))
             }
             byte => match byte & 0b1111_0000 {
                 0b1011_0000 => {
                     // Control Change
                     if bytes.len() < 3 {
-                        log::error!("Tried to parse a control change but it is too short: {:#?}", bytes);
+                        log::error!(
+                            "Tried to parse a control change but it is too short: {:#?}",
+                            bytes
+                        );
                         return None;
                     }
                     let ch = byte & 0b0000_1111;
@@ -93,7 +102,7 @@ impl MidiMessage {
                 }
                 // Other message we don't care about
                 _ => None,
-            }
+            },
         }
     }
 }
@@ -170,24 +179,34 @@ mod tests {
 
     #[test]
     fn parse_sysex() {
-        let Some((_, msg)) = MidiMessage::from_bytes(&[0xf0, 0x11, 0x11, 0x11, 0xf7]) else { panic!("Did not parse sysex")};
+        let Some((_, msg)) = MidiMessage::from_bytes(&[0xf0, 0x11, 0x11, 0x11, 0xf7]) else {
+            panic!("Did not parse sysex")
+        };
         assert_eq!(msg, MidiMessage::Sysex(vec![0x11, 0x11, 0x11]));
     }
     #[test]
     fn parse_nrpn_1() {
-        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x63, 0x28]) else {panic!("Did not parse message")};
+        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x63, 0x28]) else {
+            panic!("Did not parse message")
+        };
         assert_eq!(msg, MidiMessage::NrpnParameterMSB(0x28.into()));
     }
     fn parse_nrpn_2() {
-        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x62, 0x28]) else {panic!("Did not parse message")};
+        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x62, 0x28]) else {
+            panic!("Did not parse message")
+        };
         assert_eq!(msg, MidiMessage::NrpnParameterLSB(0x28.into()));
     }
     fn parse_nrpn_3() {
-        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x06, 0x28]) else {panic!("Did not parse message")};
+        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x06, 0x28]) else {
+            panic!("Did not parse message")
+        };
         assert_eq!(msg, MidiMessage::NrpnDataMSB(0x28.into()));
     }
     fn parse_nrpn_4() {
-        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x12, 0x28]) else {panic!("Did not parse message")};
+        let Some((_, msg)) = MidiMessage::from_bytes(&[0b10110000, 0x12, 0x28]) else {
+            panic!("Did not parse message")
+        };
         assert_eq!(msg, MidiMessage::NrpnDataLSB(0x28.into()));
     }
 }

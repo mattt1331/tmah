@@ -1,4 +1,18 @@
 //! Contains interfaces and implementations for each board
+//!
+//! To create a connectable board, you only need to implement the `Connectable` trait (and add the
+//! board to the ui dropdown). In addition to this trait, there are several submodules containing
+//! useful tools for implementing the connection.
+//! - `data`: Contains types commonly used throughout the application to represent things related
+//! to boards.
+//! - `board_messages`: Contains the `BoardEditAdaptor` trait and implementations. `BoardEdit` is
+//! an enumeration of all edits to the board that we support and each implementation of the
+//! `BoardEditAdaptor` trait knows how to convert that edit into a messasge for each particular
+//! board. This setup is nice because it allows us to reuse connection logic and keep it seperate
+//! from the details of the board's protocol.
+//! - `board_state_cache`: Contains the `BoardStateCache` type, which lets us track a board's state
+//! and knows how to use that knowledge to efficiently bring the board to a desired state without
+//! sending unnecessary messages.
 
 // Types used by this module to represent data common to all boards
 mod data;
@@ -25,6 +39,11 @@ pub trait Connectable {
     /// Draw the UI specific to the connection in the board screen
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
         ui.heading("somebody forgot to implement this ui :(");
+    }
+
+    /// An optional method that is called every frame to allow the connection to do some work
+    fn heartbeat(&mut self) {
+        // Optional, do nothing by default
     }
 
     /// Fire the provided cue
