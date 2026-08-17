@@ -181,7 +181,7 @@ impl BoardStateCache {
     fn cue_diff(
         &self,
         cue: &Cue,
-        channel_names: &ChannelNames,
+        channel_names: Option<&ChannelNames>,
         num_channels: u8,
         num_dcas: u8,
     ) -> Vec<BoardEdit> {
@@ -197,20 +197,23 @@ impl BoardStateCache {
             }
         }
         // DCA names
+        // FIX: We should not have to have this optional, I think.
         let mut dca_names: Vec<BoardEdit> = Vec::new();
-        for dca_ind in 0..num_dcas {
-            let new_name = match cue.dcas().get(dca_ind as usize) {
-                Some(dca) => dca.name(channel_names),
-                None => "".to_string(),
-            };
-            if let Some(current_name) = self.dca_names.get(&Dca::from_index(dca_ind as u8)) {
-                // We know the current name, send it if it's wrong
-                if *current_name != new_name {
+        if let Some(channel_names) = channel_names {
+            for dca_ind in 0..num_dcas {
+                let new_name = match cue.dcas().get(dca_ind as usize) {
+                    Some(dca) => dca.name(channel_names),
+                    None => "".to_string(),
+                };
+                if let Some(current_name) = self.dca_names.get(&Dca::from_index(dca_ind as u8)) {
+                    // We know the current name, send it if it's wrong
+                    if *current_name != new_name {
+                        dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
+                    }
+                } else {
+                    // We do not know the current name, send it
                     dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
                 }
-            } else {
-                // We do not know the current name, send it
-                dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
             }
         }
 
@@ -222,7 +225,7 @@ impl BoardStateCache {
     pub fn cue_diff_and_apply(
         &mut self,
         cue: &Cue,
-        channel_names: &ChannelNames,
+        channel_names: Option<&ChannelNames>,
         num_channels: u8,
         num_dcas: u8,
     ) -> Vec<BoardEdit> {

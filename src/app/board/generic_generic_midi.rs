@@ -1,15 +1,18 @@
 //! Contains implementation for connecting a generic board over MIDI. Details for each board are
 //! provided by a `board_messages::BoardEditAdaptor`.
 
+use super::data::BoardEdit;
 use super::board_messages::BoardEditAdaptor;
+use super::board_state_cache::BoardStateCache;
 use crate::app::{ChannelNames, Cue};
 use eframe::egui::{self, Color32, RichText, Ui};
-use midir::{self, MidiOutput, MidiOutputConnection, MidiOutputPort};
+use midir::{self, MidiOutput, MidiOutputConnection, MidiOutputPort, MidiInput, MidiInputConnection, MidiOutputPorts, MidiInputPorts, MidiInputPort};
+use std::sync::mpsc;
 
-/// The default value of the `no_touchy` setting
-const DEFAULT_NO_TOUCHY: bool = false;
 /// The default value of the `num_channels_controlled` setting
 const DEFAULT_NUM_CH_CONTROL: u8 = 32;
+/// The default value of the `num_dcas_controlled` setting
+const DEFAULT_NUM_DCA_CONTROL: u8 = 32;
 /// Name of the application in MIDI
 const MIDI_CLIENT_NAME: &str = "miq-v2";
 /// Certain MIDI implementations have a name for the connection
@@ -18,314 +21,388 @@ const MIDI_CONNECTION_NAME: &str = "miq-v2 connection over MIDI";
 /// A connection over MIDI to some board.
 pub struct GenericGenericMidi<Adaptor>
 where
-    Adaptor: BoardEditAdaptor,
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send + 'static,
 {
+    /// State machine representing our connection to the board
     conn: ConnectionState,
     /// Something which translates `BoardEdit`s into MIDI messages which can be sent over the
     /// connection.
     adaptor: Adaptor,
-    /// If this is true, logic will assume that no one else touches the board apart from this.
-    /// This lets it send fewer commands and is a hack until we implement receiving state update
-    /// messages from the board.
-    // TODO: implement receiving state update messages from the board
-    no_touchy: bool,
-    board_state: Option<Cue>,
     /// We will only touch the first this many channels
     num_channels_controlled: u8,
-}
-
-/// State machine representing the state of the connection to the board
-enum ConnectionState {
-    NoMidi(midir::InitError),
-    YesMidiNoConnection(
-        MidiOutput,
-        midir::MidiOutputPorts,
-        Option<midir::ConnectErrorKind>,
-    ),
-    Connected(MidiOutputConnection),
+    /// We will only touch the first this many channels
+    num_dcas_controlled: u8,
 }
 
 impl<Adaptor> GenericGenericMidi<Adaptor>
 where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send,
 {
     pub fn new(adaptor: Adaptor) -> Self {
-        let midi = MidiOutput::new(MIDI_CLIENT_NAME);
-        match midi {
-            Ok(midi) => {
-                let ports = midi.ports();
-                GenericGenericMidi {
-                    conn: ConnectionState::YesMidiNoConnection(midi, ports, None),
-                    adaptor,
-                    no_touchy: DEFAULT_NO_TOUCHY,
-                    board_state: None,
-                    num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
-                }
-            }
-            Err(init_error) => GenericGenericMidi {
-                conn: ConnectionState::NoMidi(init_error),
-                adaptor,
-                no_touchy: DEFAULT_NO_TOUCHY,
-                board_state: None,
-                num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
-            },
+        GenericGenericMidi {
+            conn: ConnectionState::new(),
+            adaptor,
+            num_channels_controlled: DEFAULT_NUM_CH_CONTROL,
+            num_dcas_controlled: DEFAULT_NUM_DCA_CONTROL,
         }
+    }
+    /// If we are connected, check for any board edits sent back from the callback and apply them to
+    /// the cache if present
+    fn update_board_state_cache(&mut self) {
+        if let ConnectionState::Connected { input, output, callback_reciever, board_state_cache } = &mut self.conn {
+            while let Ok(midi_message) = callback_reciever.try_recv() {
+                // TODO: Again, this is inefficient and we should not have to allocate like this
+                self.adaptor.recv_board_message(vec![midi_message])
+                    .map(|board_edit| board_state_cache.apply_board_edit(&board_edit));
+            }
+        } else {
+            log::warn!("Cannot update board state cache because we are not connected");
+        }
+    }
+    /// This is the callback called by midir when we recieve a MIDI message. It takes the message,
+    /// tries to parse it into a `BoardEdit`, and sends any parsed messages back to the main thread.
+    fn midi_input_callback(_timestamp: u64, message: &[u8], sender: &mut mpsc::Sender<Vec<u8>>) {
+        // FIX: This is inefficient and we should not have to allocate two vecs for this. Figure out
+        // how to improve the api so that this isn't necessary.
+        match sender.send(Vec::from(message)) {
+                // Edit sent successfully
+                Ok(()) => (),
+                Err(_) => log::error!("Tried to send a MIDI message back from the callback but the reciever has hung up. Something is very wrong."),
+            }
     }
 }
 
+/// Implementation of the interface that allows this to be used as a connectable board
 impl<Adaptor> super::Connectable for GenericGenericMidi<Adaptor>
 where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
+    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send,
 {
     fn num_channels(&self) -> u8 {
         self.num_channels_controlled
     }
     fn num_dcas(&self) -> u8 {
-        8
+        self.num_dcas_controlled
     }
     fn connected(&self) -> bool {
-        matches!(self.conn, ConnectionState::Connected(_))
+        matches!(self.conn, ConnectionState::Connected { .. })
+    }
+    // Every frame, check for messages recieved from the callback
+    fn heartbeat(&mut self) {
+        if matches!(self.conn, ConnectionState::Connected { .. }) {
+            self.update_board_state_cache();
+        }
     }
     fn fire_cue(&mut self, cue: &Cue) {
-        if self.no_touchy && self.board_state.is_some() {
-            // no touchy assumes nothing else but this touches the board
-            let Some(ref prev_cue) = self.board_state else {
-                unreachable!("Matched `Some` above")
-            };
-            let prev_cue = prev_cue.clone();
-            self.fire_cue_diff(cue, &prev_cue);
+        if matches!(self.conn, ConnectionState::Connected { .. }) {
+            self.update_board_state_cache();
+        }
+        if let ConnectionState::Connected { input, output, callback_reciever, board_state_cache } = &mut self.conn {
+            // FIXME: We are currently not sending DCA names. Fix the `Connectable` trait so that
+            // this method gets &ChannelNames.
+            let edits = board_state_cache.cue_diff_and_apply(cue, None, self.num_channels_controlled, self.num_dcas_controlled);
+            for edit in edits {
+                match self.adaptor.send_board_edit(edit) {
+                    Ok(messages) => for message in messages {
+                        output.send(&message);
+                    }
+                    Err(err) => log::error!("Failed to convert `BoardEdit` to MIDI message: {:?}", err),
+                }
+            }
         } else {
-            self.fire_full_cue(cue);
+            log::warn!("Tried to fire cue but we are not connected")
         }
     }
     fn fire_channel_names(&mut self, names: &ChannelNames) {
-        if let ConnectionState::Connected(..) = self.conn {
-            for (ch_ind, name) in names.iterator() {
-                self.fire_board_edit(super::BoardEdit::ChannelName(
-                    super::Channel::from_index(*ch_ind),
-                    name.to_string(),
-                ));
-            }
+        if let ConnectionState::Connected { output, .. } = &mut self.conn {
+            names.iterator()
+                .filter_map(|(ch_ind, name)| {
+                    self.adaptor.send_board_edit(super::BoardEdit::ChannelName(
+                        super::Channel::from_index(*ch_ind),
+                        name.to_string(),
+                    )).ok()
+                })
+                .for_each(|midi_messages| for message in midi_messages {
+                    output.send(&message);
+                });
         } else {
             log::error!("`fire_channel_names` called but we are not connected");
         }
     }
-    fn ui(&mut self, ui: &mut Ui) {
-        ui.checkbox(&mut self.no_touchy, "No touchy: Assume that nothing other than this application will change mutes or assign DCAs or such");
-        ui.label(format!(
-            "Num channels controlled: {}",
-            self.num_channels_controlled
-        ));
-        ui.add_space(10.0);
-        match self.conn {
-            ConnectionState::NoMidi(init_error) => {
-                ui.label(
-                    RichText::new(format!("Failed to initialize MIDI: {}", init_error))
-                        .color(Color32::RED),
-                );
-                // Retry button
-                let response = ui.button("Retry");
-                if response.clicked() {
-                    self.try_init_midi();
-                }
-            }
-            ConnectionState::YesMidiNoConnection(_, _, conn_err) => {
-                ui.label(RichText::new("MIDI initialized").color(Color32::GREEN));
-                // Dropdown to select MIDI output
-                egui::ComboBox::from_label("Select MIDI output corresponding to board")
-                    .selected_text("Ports")
-                    .show_ui(ui, |ui| {
-                        if let Ok(ports) = self.ports() {
-                            let mut responses = Vec::new();
-                            for port in &ports {
-                                responses.push(ui.button(port.id()));
-                            }
-                            for (i, response) in responses.iter().enumerate() {
-                                if response.clicked() {
-                                    let port = ports[i].clone();
-                                    self.try_connect(port);
-                                }
-                            }
-                        } else {
-                            ui.label("Could not get ports");
-                        }
-                    });
-                // Reload ports list button
-                if ui.button("Reload ports").clicked() {
-                    self.update_ports_list();
-                }
-                if let Some(conn_err) = conn_err {
-                    ui.label(
-                        RichText::new(format!("Failed to connect: {}", conn_err))
-                            .color(Color32::RED),
-                    );
-                }
-            }
-            ConnectionState::Connected(_) => {
-                ui.label(RichText::new("Connected").color(Color32::GREEN));
-                if ui.button("Disconnect").clicked() {
-                    self.disconnect();
-                }
-            }
-        };
-    }
+    //fn ui(&mut self, ui: &mut Ui) {
+    //    ui.checkbox(&mut self.no_touchy, "No touchy: Assume that nothing other than this application will change mutes or assign DCAs or such");
+    //    ui.label(format!(
+    //        "Num channels controlled: {}",
+    //        self.num_channels_controlled
+    //    ));
+    //    ui.add_space(10.0);
+    //    match self.conn {
+    //        ConnectionState::NoMidi(init_error) => {
+    //            ui.label(
+    //                RichText::new(format!("Failed to initialize MIDI: {}", init_error))
+    //                    .color(Color32::RED),
+    //            );
+    //            // Retry button
+    //            let response = ui.button("Retry");
+    //            if response.clicked() {
+    //                self.try_init_midi();
+    //            }
+    //        }
+    //        ConnectionState::YesMidiNoConnection(_, _, conn_err) => {
+    //            ui.label(RichText::new("MIDI initialized").color(Color32::GREEN));
+    //            // Dropdown to select MIDI output
+    //            egui::ComboBox::from_label("Select MIDI output corresponding to board")
+    //                .selected_text("Ports")
+    //                .show_ui(ui, |ui| {
+    //                    if let Ok(ports) = self.ports() {
+    //                        let mut responses = Vec::new();
+    //                        for port in &ports {
+    //                            responses.push(ui.button(port.id()));
+    //                        }
+    //                        for (i, response) in responses.iter().enumerate() {
+    //                            if response.clicked() {
+    //                                let port = ports[i].clone();
+    //                                self.try_connect(port);
+    //                            }
+    //                        }
+    //                    } else {
+    //                        ui.label("Could not get ports");
+    //                    }
+    //                });
+    //            // Reload ports list button
+    //            if ui.button("Reload ports").clicked() {
+    //                self.update_ports_list();
+    //            }
+    //            if let Some(conn_err) = conn_err {
+    //                ui.label(
+    //                    RichText::new(format!("Failed to connect: {}", conn_err))
+    //                        .color(Color32::RED),
+    //                );
+    //            }
+    //        }
+    //        ConnectionState::Connected(_) => {
+    //            ui.label(RichText::new("Connected").color(Color32::GREEN));
+    //            if ui.button("Disconnect").clicked() {
+    //                self.disconnect();
+    //            }
+    //        }
+    //    };
+    //}
 }
 
-/// For external use
-/// (part of med level API)
-impl<Adaptor> GenericGenericMidi<Adaptor>
-where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
-{
-    /// For a connection which failed to initialize MIDI, retry initializing
-    pub fn try_init_midi(&mut self) {
-        if let ConnectionState::NoMidi(_) = self.conn {
-            // Yes this is exactly like `Self::new`
-            let midi = MidiOutput::new(MIDI_CLIENT_NAME);
-            match midi {
-                Ok(midi) => {
-                    let ports = midi.ports();
-                    self.conn = ConnectionState::YesMidiNoConnection(midi, ports, None)
-                }
-                Err(init_error) => self.conn = ConnectionState::NoMidi(init_error),
+/// State maching representing the state of the connection to the board
+// TODO: Make all three of these a typestate
+enum ConnectionState {
+    NotConnected(OutputConnectionState, InputConnectionState),
+    Connected {
+        output: MidiOutputConnection,
+        input: MidiInputConnection<mpsc::Sender<Vec<u8>>>,
+        callback_reciever: mpsc::Receiver<Vec<u8>>,
+        board_state_cache: BoardStateCache,
+    },
+}
+impl ConnectionState {
+    /// Create new connection objects. Takes the adaptor used by the input connection
+    fn new() -> Self {
+        ConnectionState::NotConnected(OutputConnectionState::new(), InputConnectionState::new())
+    }
+}
+/// State machine representing the state of the outgoing connection to the board. Some of the
+/// variants have adaptors in them because that is where the input adaptor is stored while it's not
+/// in the connection.
+enum OutputConnectionState {
+    NoMidi(midir::InitError),
+    YesMidiNoConnection(
+        MidiOutput,
+        Option<midir::ConnectErrorKind>
+    ),
+    Connected(MidiOutputConnection),
+}
+impl OutputConnectionState {
+    /// Create a new output connection object, attempting to initialize MIDI
+    fn new() -> Self {
+        match MidiOutput::new(MIDI_CLIENT_NAME) {
+            Ok(midi_output) => {
+                log::info!("Succesfully initialized MIDI (output)");
+                OutputConnectionState::YesMidiNoConnection(
+                    midi_output,
+                    None
+                    )
             }
-        } else {
-            log::warn!("`try_init_midi` called but we already initialized MIDI");
+            Err(init_err) => {
+                log::warn!("Failed to initialize MIDI (output): {init_err}");
+                OutputConnectionState::NoMidi(init_err)
+            }
         }
     }
-    /// For a connection with MIDI initialized but not connected, return the list of available
-    /// ports
-    pub fn ports(&self) -> Result<midir::MidiOutputPorts, ()> {
-        if let ConnectionState::YesMidiNoConnection(_, ports, _) = &self.conn {
-            Ok(ports.clone())
-        } else {
-            log::warn!("Get `ports` called but is not available in current state");
-            Err(())
-        }
-    }
-    /// For a connection with MIDI initialized but not connected, update the list of MIDI output ports
-    pub fn update_ports_list(&mut self) {
-        if let ConnectionState::YesMidiNoConnection(midi, ports, _) = &mut self.conn {
-            *ports = midi.ports();
-        } else {
-            log::warn!("`update_ports_list` called but is not available in current state");
-        }
-    }
-    /// For a connection with MIDI initialized but not connected, try to connect to the given port
-    pub fn try_connect(&mut self, port: MidiOutputPort) {
-        // Because connect needs ownership of midi, we need to do this maneuver to get `self.conn`
-        // out from behind the reference. Note that we must return `conn` from the closure.
-        take_mut::take(&mut self.conn, |conn| {
-            if let ConnectionState::YesMidiNoConnection(midi, _, _) = conn {
-                let connection = midi.connect(&port, MIDI_CONNECTION_NAME);
-                match connection {
-                    Ok(connection) => ConnectionState::Connected(connection),
-                    Err(connection_error) => {
-                        log::error!("Unable to connect to MIDI port: {connection_error}");
-                        let error = connection_error.kind();
-                        let midi = connection_error.into_inner();
-                        let ports = midi.ports();
-                        ConnectionState::YesMidiNoConnection(midi, ports, Some(error))
+    /// For a `NoMidi`, try to initialize MIDI
+    fn try_init_midi(&mut self) {
+        match self {
+            OutputConnectionState::NoMidi(_) => {
+                match MidiOutput::new(MIDI_CLIENT_NAME) {
+                    Ok(midi_output) => {
+                        log::info!("Succesfully initialized MIDI (output)");
+                        *self = OutputConnectionState::YesMidiNoConnection(
+                            midi_output,
+                            None
+                            );
+                    }
+                    Err(init_err) => {
+                        log::warn!("Failed to initialize MIDI (output): {init_err}");
+                        *self = OutputConnectionState::NoMidi(init_err);
                     }
                 }
-            } else {
-                log::warn!("`try_connect` called but is not available in current state");
-                conn
             }
-        });
+            _ => {
+                log::warn!("Tried to initialize MIDI on an output connection which already has MIDI");
+            }
+        }
     }
-    /// For a connection which is connected, disconnect
-    pub fn disconnect(&mut self) {
-        if matches!(self.conn, ConnectionState::Connected(_)) {
-            // See `try_connect` for why we do this
-            take_mut::take(&mut self.conn, |conn| {
-                if let ConnectionState::Connected(conn) = conn {
-                    let midi = conn.close();
-                    let ports = midi.ports();
-                    ConnectionState::YesMidiNoConnection(midi, ports, None)
-                } else {
-                    log::error!(
-                        "Should be in state `Connected` from `matches!` above but something has gone very wrong, failed to disconnect"
-                    );
-                    conn
+    /// Get the ports available to connect to in a `YesMidiNoConnection`
+    fn get_ports(&self) -> Result<MidiOutputPorts, ()> {
+        match self {
+            OutputConnectionState::YesMidiNoConnection(midi_output, _) => Ok(midi_output.ports()),
+            _ => {
+                log::warn!("Tried to get ports from an output connection which is not in a state to connect to ports");
+                Err(())
+            }
+        }
+    }
+    /// Try to connect to the given port
+    fn try_connect(self, port: &MidiOutputPort) -> Self {
+        if let OutputConnectionState::YesMidiNoConnection(midi_output, _) = self {
+            match midi_output.connect(port, MIDI_CONNECTION_NAME) {
+                Ok(connection) => {
+                    log::info!("Succesfully connected to MIDI output");
+                    OutputConnectionState::Connected(connection)
                 }
-            })
-        } else {
-            log::warn!("`disconnect` called on a connection which is not connected");
-        }
-    }
-}
-
-/// For internal use
-/// Old API (low + med level)
-impl<Adaptor: BoardEditAdaptor> GenericGenericMidi<Adaptor>
-where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
-{
-    /// Fire the provided cue, taking into account the differences between it and `prev_cue` and
-    /// updates cached board state
-    fn fire_cue_diff(&mut self, cue: &Cue, prev_cue: &Cue) {
-        let diff = Cue::diff(prev_cue, cue);
-        self.fire_diff(diff);
-        self.update_board_state_with_fired(cue)
-    }
-    /// Fire the provided cue in full and updates cached board state
-    fn fire_full_cue(&mut self, cue: &Cue) {
-        // FIX: This is a hack. It works, but it's dumb. While decoupling this from app above and
-        // from board edits below, fix this.
-        let blank_cue = Cue::default();
-        let diff = Cue::diff(&blank_cue, cue);
-        self.fire_diff(diff);
-        self.update_board_state_with_fired(cue);
-    }
-    /// Update the cache of the board state assuming this cue has just been fired
-    fn update_board_state_with_fired(&mut self, cue: &Cue) {
-        if let Some(cue_old) = &self.board_state {
-            self.board_state = Some(cue_old.superimpose(cue))
-        } else {
-            self.board_state = Some(cue.clone())
-        }
-    }
-}
-/// Improved API
-/// New API (low level)
-impl<Adaptor> GenericGenericMidi<Adaptor>
-where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>>,
-{
-    // move into trait default impl
-    fn fire_diff(&mut self, diff: Vec<super::BoardEdit>) {
-        for edit in diff {
-            self.fire_board_edit(edit);
-        }
-    }
-    fn fire_board_edit(&mut self, edit: super::BoardEdit) {
-        let message = self.adaptor.send_board_edit(edit);
-        let message: Vec<Vec<u8>> = match message {
-            Ok(msg) => msg,
-            Err(err) => {
-                log::error!("Failed to convert BoardEdit to midi message: {err:?}");
-                return;
+                Err(connect_error) => {
+                    let err = connect_error.kind();
+                    log::warn!("MIDI output failed to connect: {err}");
+                    OutputConnectionState::YesMidiNoConnection(
+                        connect_error.into_inner(),
+                        Some(err),
+                        )
+                }
             }
-        };
-        for midi_message in message {
-            self.send(&midi_message);
+        } else {
+            log::warn!("Tried to connect but this output connection is not in a state to connect");
+            self
         }
     }
-}
-/// For internal use
-impl<Adaptor: BoardEditAdaptor> GenericGenericMidi<Adaptor> {
-    /// Send the provided midi message
-    /// Note: takes 7-bit midi bytes, not normal bytes
+    /// Disconnect from the connected MIDI port
+    fn disconnect(self) -> Self {
+        if let OutputConnectionState::Connected(conn) = self {
+            let midi_output = conn.close();
+            OutputConnectionState::YesMidiNoConnection(midi_output, None)
+        } else {
+            log::warn!("Tried to disconnect an output connection which is not ocnnected");
+            self
+        }
+    }
+    /// Send the given message
     fn send(&mut self, message: &[u8]) {
-        if let ConnectionState::Connected(conn) = &mut self.conn {
-            let result = conn.send(message);
-            match result {
-                Ok(()) => log::info!("MIDI message sent"),
-                Err(err) => log::error!("Failed to send MIDI message: {err}"),
+        if let OutputConnectionState::Connected(output_con) = self {
+            match output_con.send(message) {
+                Ok(()) => (),
+                Err(err) => log::warn!("Failed to send MIDI message: {err}"),
             }
         } else {
-            log::warn!("`send` MIDI message called but we are disconnected");
+            log::warn!("Tried to send MIDI message but we are not connected")
+        }
+    }
+}
+/// State machine representing the state of the incoming connection from the board. This also stores
+/// the input adaptor while it isn't being used.
+enum InputConnectionState {
+    NoMidi(midir::InitError),
+    YesMidiNoConnection(
+        MidiInput,
+        Option<midir::ConnectErrorKind>,
+    ),
+    Connected(MidiInputConnection<mpsc::Sender<Vec<u8>>>, mpsc::Receiver<Vec<u8>>, BoardStateCache),
+}
+impl InputConnectionState {
+    /// Create a new input connection object, taking the adaptor to be used in the connection
+    fn new() -> Self {
+        match MidiInput::new(MIDI_CLIENT_NAME) {
+            Ok(midi_input) => {
+                log::info!("Succesfully initialized MIDI input");
+                InputConnectionState::YesMidiNoConnection(
+                    midi_input,
+                    None,
+                    )
+            }
+            Err(init_err) => {
+                log::warn!("Failed to initialize MIDI output: {init_err}");
+                InputConnectionState::NoMidi(init_err)
+            }
+        }
+    }
+    /// For a `NoMidi`, try to initialize MIDI
+    fn try_init_midi(self) -> Self {
+        match self {
+            InputConnectionState::NoMidi(_) => {
+                match MidiInput::new(MIDI_CLIENT_NAME) {
+                    Ok(midi_input) => {
+                        log::info!("Succesfully initialized MIDI input");
+                        InputConnectionState::YesMidiNoConnection(
+                            midi_input,
+                            None,
+                            )
+                    }
+                    Err(init_err) => {
+                        log::warn!("Failed to initialize MIDI output: {init_err}");
+                        InputConnectionState::NoMidi(init_err)
+                    }
+                }
+            }
+            _ => {
+                log::warn!("Tried to initialize MIDI on an output connection which already has MIDI");
+                self
+            }
+        }
+    }
+    /// Get the ports available to connect to in a `YesMidiNoConnection`
+    fn get_ports(&self) -> Result<MidiInputPorts, ()> {
+        match self {
+            InputConnectionState::YesMidiNoConnection(midi_input, _) => Ok(midi_input.ports()),
+            _ => {
+                log::warn!("Tried to get ports from an input connection which is not in a state to connect to ports");
+                Err(())
+            }
+        }
+    }
+    /// Try to connect to the given port
+    fn try_connect<Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send + 'static>(self, port: &MidiInputPort) -> Self {
+        if let InputConnectionState::YesMidiNoConnection(midi_input, _) = self {
+            let (tx, rx) = mpsc::channel();
+            match midi_input.connect(port, MIDI_CONNECTION_NAME, GenericGenericMidi::<Adaptor>::midi_input_callback, tx) {
+                Ok(connection) => {
+                    log::info!("Succesfully connected to MIDI input");
+                    InputConnectionState::Connected(connection, rx, BoardStateCache::default())
+                }
+                Err(connect_error) => {
+                    let err = connect_error.kind();
+                    log::warn!("MIDI input failed to connect: {err}");
+                    InputConnectionState::YesMidiNoConnection(
+                        connect_error.into_inner(),
+                        Some(err),
+                        )
+                }
+            }
+        } else {
+            log::warn!("Tried to connect but this input connection is not in a state to connect");
+            self
+        }
+    }
+    /// Disconnect from the connected MIDI port
+    fn disconnect(self) -> Self {
+        if let InputConnectionState::Connected(conn, _receiver, _cache) = self {
+            let (midi_input, _tx) = conn.close();
+            InputConnectionState::YesMidiNoConnection(midi_input, None)
+        } else {
+            log::warn!("Tried to disconnect an input connection which is not ocnnected");
+            self
         }
     }
 }
