@@ -208,7 +208,8 @@ impl BoardStateCache {
                 if let Some(current_name) = self.dca_names.get(&Dca::from_index(dca_ind as u8)) {
                     // We know the current name, send it if it's wrong
                     if *current_name != new_name {
-                        dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
+                        dca_names
+                            .push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
                     }
                 } else {
                     // We do not know the current name, send it
@@ -421,8 +422,8 @@ mod tests {
         *dca2.edit_name() = Some("Name".to_string());
         let cue1 = cue_with_dcas(vec![dca1]);
         let cue2 = cue_with_dcas(vec![dca2]);
-        let _: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue1, &names, 1, 1);
-        let edits: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue2, &names, 1, 1);
+        let _: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue1, Some(&names), 1, 1);
+        let edits: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue2, Some(&names), 1, 1);
         assert_eq!(
             edits,
             vec![
@@ -441,8 +442,8 @@ mod tests {
         *dca2.edit_name() = Some("Name".to_string());
         let cue1 = cue_with_dcas(vec![dca1, dca2.clone()]);
         let cue2 = cue_with_dcas(vec![dca2]);
-        let _: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue1, &names, 1, 2);
-        let edits: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue2, &names, 1, 2);
+        let _: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue1, Some(&names), 1, 2);
+        let edits: Vec<BoardEdit> = cache.cue_diff_and_apply(&cue2, Some(&names), 1, 2);
         assert_eq!(
             edits,
             vec![
