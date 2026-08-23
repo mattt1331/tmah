@@ -5,11 +5,12 @@ use super::BoardEdit;
 pub trait BoardEditAdaptor {
     /// The messages the board sends/recieves that this adaptor converts to/from `BoardEdit`.
     type Message;
+    // FIX: For both send and recv, take and return references instead of the owned values because
+    // performance.
     /// Converts a `BoardEdit` to a `Message` to be sent to the board.
-    fn send_board_edit(&mut self, edit: BoardEdit) -> Result<Self::Message, SendError>;
+    fn send_board_edit(&mut self, edit: BoardEdit) -> Result<impl Iterator<Item = Self::Message>, SendError>;
     /// Receives a message from the board, possibly converting it to a `BoardEdit` if appropriate
-    #[allow(dead_code)] //FIX: delete this once we use this the warning is annoying me
-    fn recv_board_message(&mut self, message: Self::Message) -> Option<BoardEdit>;
+    fn recv_board_message(&mut self, message: Self::Message) -> Option<impl Iterator<Item = BoardEdit>>;
 }
 
 /// An error which may arise when attempting to convert a `BoardEdit` to a board message.

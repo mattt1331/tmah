@@ -12,22 +12,23 @@ pub struct YamahaM7CLMidi;
 pub type MidiMessage = Vec<u8>;
 
 impl BoardEditAdaptor for YamahaM7CLMidi {
-    type Message = Vec<MidiMessage>;
+    type Message = MidiMessage;
 
-    fn send_board_edit(&mut self, edit: BoardEdit) -> Result<Self::Message, super::SendError> {
+    fn send_board_edit(&mut self, edit: BoardEdit) -> Result<impl Iterator<Item = MidiMessage>, super::SendError> {
         match edit {
-            BoardEdit::ChannelMute(ch, mute) => Ok(send_ch_on(ch.index(), !mute)),
+            BoardEdit::ChannelMute(ch, mute) => Ok(send_ch_on(ch.index(), !mute).into_iter()),
             BoardEdit::ChannelDcaAssign(ch, dca, assign) => {
-                Ok(send_ch_dca(ch.index(), dca.index(), assign))
+                Ok(send_ch_dca(ch.index(), dca.index(), assign).into_iter())
             }
-            BoardEdit::ChannelName(ch, name) => Ok(send_channel_name(ch.index(), &name)),
+            BoardEdit::ChannelName(ch, name) => Ok(send_channel_name(ch.index(), &name).into_iter()),
             BoardEdit::DcaLevel(_dca, _level) => todo!(),
-            BoardEdit::DcaName(dca, name) => Ok(send_dca_name(dca.index(), &name)),
+            BoardEdit::DcaName(dca, name) => Ok(send_dca_name(dca.index(), &name).into_iter()),
         }
     }
 
-    fn recv_board_message(&mut self, _message: Self::Message) -> Option<BoardEdit> {
-        todo!()
+    fn recv_board_message(&mut self, _message: Self::Message) -> Option<impl Iterator<Item = BoardEdit>> {
+        todo!();
+        None::<std::vec::IntoIter<_>>
     }
 }
 
