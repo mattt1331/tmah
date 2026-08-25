@@ -24,7 +24,7 @@ const MIDI_CONNECTION_NAME: &str = "miq-v2 connection over MIDI";
 /// A connection over MIDI to some board.
 pub struct GenericGenericMidi<Adaptor>
 where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send + 'static,
+    Adaptor: BoardEditAdaptor<Message = Vec<u8>> + Send + 'static,
 {
     /// State machine representing our connection to the board
     conn: ConnectionState,
@@ -46,7 +46,7 @@ where
 
 impl<Adaptor> GenericGenericMidi<Adaptor>
 where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send,
+    Adaptor: BoardEditAdaptor<Message = Vec<u8>> + Send,
 {
     pub fn new(adaptor: Adaptor) -> Self {
         GenericGenericMidi {
@@ -71,8 +71,8 @@ where
             while let Ok(midi_message) = callback_receiver.try_recv() {
                 // TODO: Again, this is inefficient and we should not have to allocate like this
                 self.adaptor
-                    .recv_board_message(vec![midi_message])
-                    .map(|board_edit| board_state_cache.apply_board_edit(&board_edit));
+                    .recv_board_message(midi_message)
+                    .map(|board_edit| board_edit.for_each(|edit| board_state_cache.apply_board_edit(&edit)));
             }
         } else {
             log::warn!("Cannot update board state cache because we are not connected");
@@ -96,7 +96,7 @@ where
 /// Implementation of the interface that allows this to be used as a connectable board
 impl<Adaptor> super::Connectable for GenericGenericMidi<Adaptor>
 where
-    Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send,
+    Adaptor: BoardEditAdaptor<Message = Vec<u8>> + Send,
 {
     fn num_channels(&self) -> u8 {
         self.num_channels_controlled
@@ -150,21 +150,16 @@ where
     }
     fn fire_channel_names(&mut self, names: &ChannelNames) {
         if let ConnectionState::Connected { output, .. } = &mut self.conn {
-            names
-                .iterator()
-                .filter_map(|(ch_ind, name)| {
-                    self.adaptor
-                        .send_board_edit(super::BoardEdit::ChannelName(
-                            super::Channel::from_index(*ch_ind),
-                            name.to_string(),
-                        ))
-                        .ok()
-                })
-                .for_each(|midi_messages| {
-                    for message in midi_messages {
-                        output.send(&message);
+            for (ch_ind, name) in names.iterator() {
+                match self.adaptor
+                    .send_board_edit(super::BoardEdit::ChannelName(
+                        super::Channel::from_index(*ch_ind),
+                        name.to_string(),
+                    )) {
+                        Ok(messages) => messages.for_each(|msg| { output.send(&msg); }),
+                        Err(err) => log::warn!("Tried to send channel name but encountered error adapting `BoardEdit` to correct format: {:?}", err),
                     }
-                });
+            }
         } else {
             log::error!("`fire_channel_names` called but we are not connected");
         }
@@ -520,7 +515,7 @@ impl InputConnectionState {
         }
     }
     /// Try to connect to the given port
-    fn try_connect<Adaptor: BoardEditAdaptor<Message = Vec<Vec<u8>>> + Send + 'static>(
+    fn try_connect<Adaptor: BoardEditAdaptor<Message = Vec<u8>> + Send + 'static>(
         self,
         port: &MidiInputPort,
     ) -> Self {
