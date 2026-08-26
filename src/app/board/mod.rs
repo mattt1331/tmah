@@ -7,8 +7,8 @@
 //! to boards.
 //! - `board_messages`: Contains the `BoardEditAdaptor` trait and implementations. `BoardEdit` is
 //! an enumeration of all edits to the board that we support and each implementation of the
-//! `BoardEditAdaptor` trait knows how to convert that edit into a messasge for each particular
-//! board. This setup is nice because it allows us to reuse connection logic and keep it seperate
+//! `BoardEditAdaptor` trait knows how to convert that edit into a message for each particular
+//! board. This setup is nice because it allows us to reuse connection logic and keep it separate
 //! from the details of the board's protocol.
 //! - `board_state_cache`: Contains the `BoardStateCache` type, which lets us track a board's state
 //! and knows how to use that knowledge to efficiently bring the board to a desired state without
@@ -67,7 +67,8 @@ impl Connections {
         match self {
             Connections::None => Box::new(NoConnection::new()),
             Connections::YamahaM7CLMidi => Box::new(generic_generic_midi::GenericGenericMidi::new(
-                board_messages::YamahaM7CLMidi,
+                board_messages::YamahaM7CLMidi::new(),
+                board_messages::YAMAHA_M7CL_MIDI_UI_BOARD_CONFIG_TUTORIAL.to_string(),
             )),
         }
     }

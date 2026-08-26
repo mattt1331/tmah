@@ -341,53 +341,6 @@ impl Cue {
     fn dcas_mut(&mut self) -> &mut Vec<DcaState> {
         &mut self.dcas
     }
-    /// Takes this cue and has the provided `top` cue override any parameters that `top` sets.
-    /// Currently this just returns `top` but when EQs and crap get added this will make much more
-    /// sense as Cue is currently used to record the state of the board (M7CL). This could also be
-    /// terrible but idk
-    // FIXME: this is not correct anymore. Use diff
-    fn superimpose(&self, top: &Cue) -> Cue {
-        top.clone()
-    }
-    /// Finds the difference between the two given cues and produces a list of board edits to go
-    /// from `prev` to `next`.
-    fn diff(prev: &Cue, next: &Cue) -> Vec<board::BoardEdit> {
-        let mut diff: Vec<board::BoardEdit> = Vec::new();
-        // Get the diffs for each individual DCA
-        for (i, next_dca) in next.dcas.iter().enumerate() {
-            if i < prev.dcas.len() {
-                diff.append(&mut DcaState::diff(
-                    &prev.dcas[i],
-                    next_dca,
-                    board::Dca::from_index(i as u8),
-                ));
-            } else {
-                // If somehow the second cue has more dcas listed than the first
-                diff.append(&mut next.dcas[i].full_send(board::Dca::from_index(i as u8)));
-            }
-        }
-        // Deconflict unmutes: if someone is exiting one dca and entering another, DO NOT send the
-        // mute.
-        // FIX: this is not the best way to implement this.
-        let mut unmutes = Vec::new();
-        for edit in &diff {
-            if matches!(edit, board::BoardEdit::ChannelMute(_, false)) {
-                unmutes.push(edit.clone());
-            }
-        }
-        for unmute in unmutes {
-            let board::BoardEdit::ChannelMute(unmute_channel, _) = unmute else {
-                unreachable!(
-                    "All elements of `unmutes` should be `BoardEdit::ChannelMute` because of above"
-                );
-            };
-            diff.retain(|edit| match edit {
-                board::BoardEdit::ChannelMute(channel, true) => *channel != unmute_channel,
-                _ => true,
-            });
-        }
-        diff
-    }
 }
 
 /// The state of a DCA, which can be realized by calling a cue
@@ -442,61 +395,6 @@ impl DcaState {
     /// Unassigns the given channel from this DCA
     fn unassign(&mut self, ch: Channel) {
         self.assigned.remove(&ch);
-    }
-    /// Find the differences between the two given `DcaState`s. The differences will be given as
-    /// board edits so that they can be applied to go from `prev` to `next`. The diff includes
-    /// mute/unmute operations so that channels which are unassigned are muted and channels which
-    /// are newly assigned are unmuted.
-    fn diff(prev: &DcaState, next: &DcaState, dca: board::Dca) -> Vec<board::BoardEdit> {
-        let unassigned = prev.assigned.difference(&next.assigned);
-        let assigned = next.assigned.difference(&prev.assigned);
-        let mut diff = Vec::new();
-        for ch in unassigned {
-            diff.push(board::BoardEdit::ChannelDcaAssign(
-                ch.clone(),
-                dca.clone(),
-                false,
-            ));
-            diff.push(board::BoardEdit::ChannelMute(ch.clone(), true));
-        }
-        for ch in assigned {
-            diff.push(board::BoardEdit::ChannelDcaAssign(
-                ch.clone(),
-                dca.clone(),
-                true,
-            ));
-            diff.push(board::BoardEdit::ChannelMute(ch.clone(), false));
-        }
-        if prev.name != next.name
-            && let Some(name) = &next.name
-        {
-            diff.push(board::BoardEdit::DcaName(dca.clone(), name.clone()));
-        }
-        if prev.level != next.level
-            && let Some(level) = next.level
-        {
-            diff.push(board::BoardEdit::DcaLevel(dca.clone(), level));
-        }
-        diff
-    }
-    /// Returns a diff, as board edit actions, which applies all of the values stored in the
-    /// `DcaState`.
-    fn full_send(&self, dca: board::Dca) -> Vec<board::BoardEdit> {
-        let mut diff = Vec::new();
-        for ch in &self.assigned {
-            diff.push(board::BoardEdit::ChannelDcaAssign(
-                ch.clone(),
-                dca.clone(),
-                true,
-            ));
-        }
-        if let Some(name) = &self.name {
-            diff.push(board::BoardEdit::DcaName(dca.clone(), name.clone()));
-        }
-        if let Some(level) = self.level {
-            diff.push(board::BoardEdit::DcaLevel(dca.clone(), level));
-        }
-        diff
     }
 }
 

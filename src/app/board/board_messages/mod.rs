@@ -8,9 +8,15 @@ pub trait BoardEditAdaptor {
     // FIX: For both send and recv, take and return references instead of the owned values because
     // performance.
     /// Converts a `BoardEdit` to a `Message` to be sent to the board.
-    fn send_board_edit(&mut self, edit: BoardEdit) -> Result<impl Iterator<Item = Self::Message>, SendError>;
+    fn send_board_edit(
+        &mut self,
+        edit: BoardEdit,
+    ) -> Result<impl Iterator<Item = Self::Message>, SendError>;
     /// Receives a message from the board, possibly converting it to a `BoardEdit` if appropriate
-    fn recv_board_message(&mut self, message: Self::Message) -> Option<impl Iterator<Item = BoardEdit>>;
+    fn recv_board_message(
+        &mut self,
+        message: Self::Message,
+    ) -> Option<impl Iterator<Item = BoardEdit>>;
 }
 
 /// An error which may arise when attempting to convert a `BoardEdit` to a board message.
@@ -22,6 +28,7 @@ pub enum SendError {
 
 mod yamaha_m7cl_midi;
 
+pub use yamaha_m7cl_midi::UI_BOARD_CONFIG_TUTORIAL as YAMAHA_M7CL_MIDI_UI_BOARD_CONFIG_TUTORIAL;
 pub use yamaha_m7cl_midi::YamahaM7CLMidi;
 
 mod util_midi;

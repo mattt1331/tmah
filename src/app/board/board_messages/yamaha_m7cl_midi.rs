@@ -1,34 +1,149 @@
 //! An adaptor between `BoardEdit` and the MIDI messages that the Yamaha M7CL sends and receives
 //! through the pair of three-pin MIDI ports on its back panel.
-//! Multiple MIDI messages may need to be produced for a single `BoardEdit`. Consequently, the
-//! adaptor produces a `Vec` of `MidiMessage`s, which are themselves `Vec<u8>`. This is not optimal
-//! (FIX pls, the messages cannot be combined into one stream because some implementations (eg alsa)
-//! do not function correctly if multiple messages are `send`ed in one go).
+//! Important note: This adaptor makes certain assumptions about how the board is configured. See
+//! `UI_BOARD_CONFIG_TUTORIAL` for more information. Namely, we receive all messages from the board
+//! as SYSEX, because we need to listen for SYSEX anyways (DCA assignment can only be done via
+//! SYSEX). Consequently, in order to avoid having two streams of duplicate messages being sent at
+//! us, we receive everything via SYSEX.
 
+use super::super::{Channel, Dca};
+use super::util_midi::MidiMessage as ParsedMidiMessage;
 use super::{BoardEdit, BoardEditAdaptor};
 
-pub struct YamahaM7CLMidi;
+pub const UI_BOARD_CONFIG_TUTORIAL: &str = "\
+Note: The board's MIDI settings need to be configured correctly. Ensure that the following are set:
+    1. PORT/CH Tx and Rx are set to CH1
+    2. CONTROL CHANGE Rx is on
+    3. CONTROL CHANGE mode is set to NRPN
+    4. PARAMETER CHANGE Tx and Rx are on
+Preferably, all of the other Tx, Rx, and ECHO settings should be turned off.";
+
+pub struct YamahaM7CLMidi {
+    // DCA names get sent in halves for some reason
+    last_dca_name_short_1: Option<(Dca, [u8; 4])>,
+    last_dca_name_short_2: Option<(Dca, [u8; 4])>,
+}
+
+impl YamahaM7CLMidi {
+    /// Create a new instance of this adaptor. Note that this adaptor is stateful because messages
+    /// are received in parts.
+    pub fn new() -> Self {
+        YamahaM7CLMidi {
+            last_dca_name_short_1: None,
+            last_dca_name_short_2: None,
+        }
+    }
+}
 
 pub type MidiMessage = Vec<u8>;
 
 impl BoardEditAdaptor for YamahaM7CLMidi {
     type Message = MidiMessage;
 
-    fn send_board_edit(&mut self, edit: BoardEdit) -> Result<impl Iterator<Item = MidiMessage>, super::SendError> {
+    fn send_board_edit(
+        &mut self,
+        edit: BoardEdit,
+    ) -> Result<impl Iterator<Item = MidiMessage>, super::SendError> {
         match edit {
             BoardEdit::ChannelMute(ch, mute) => Ok(send_ch_on(ch.index(), !mute).into_iter()),
             BoardEdit::ChannelDcaAssign(ch, dca, assign) => {
                 Ok(send_ch_dca(ch.index(), dca.index(), assign).into_iter())
             }
-            BoardEdit::ChannelName(ch, name) => Ok(send_channel_name(ch.index(), &name).into_iter()),
+            BoardEdit::ChannelName(ch, name) => {
+                Ok(send_channel_name(ch.index(), &name).into_iter())
+            }
             BoardEdit::DcaLevel(_dca, _level) => todo!(),
             BoardEdit::DcaName(dca, name) => Ok(send_dca_name(dca.index(), &name).into_iter()),
         }
     }
 
-    fn recv_board_message(&mut self, _message: Self::Message) -> Option<impl Iterator<Item = BoardEdit>> {
-        todo!();
-        None::<std::vec::IntoIter<_>>
+    /// Parses MIDI messages into `BoardEdits`. Note that this will only parse the `ChannelMute`,
+    /// `ChannelDcaAssign`, and `DcaName` variants because at time of writing those are the only
+    /// ones that we care about receiving in the codebase.
+    // TODO: Implement selecting by MIDI channel
+    fn recv_board_message(
+        &mut self,
+        message: Self::Message,
+    ) -> Option<impl Iterator<Item = BoardEdit>> {
+        // ChannelMute: kInputOn
+        // ChannelDcaAssign: kInputDCA
+        // DcaName: kDCAName
+        if let Some((_midi_channel, message)) = ParsedMidiMessage::from_bytes(&message) {
+            match message {
+                ParsedMidiMessage::Sysex(message) => {
+                    if let Some((elem, ind, cc, dd)) = recv_prm_sysex(&message) {
+                        match elem {
+                            // kInputOn
+                            0x0030 => {
+                                // channel is cc CH TABLE 1
+                                let channel = Channel::from_index(cc as u8);
+                                // data is off, on; 0, 1
+                                let mute = dd[0] == 0;
+                                return Some(std::iter::once(BoardEdit::ChannelMute(
+                                    channel, mute,
+                                )));
+                            }
+                            // kInputDCA
+                            0x003f => {
+                                // ind is dca index
+                                let dca = Dca::from_index(ind as u8);
+                                // cc is channel CH TABLE 1
+                                let channel = Channel::from_index(cc as u8);
+                                // data is not assign, assign; 0, 1
+                                let is_assigned = dd[0] != 0;
+                                return Some(std::iter::once(BoardEdit::ChannelDcaAssign(
+                                    channel,
+                                    dca,
+                                    is_assigned,
+                                )));
+                            }
+                            // kDcaName
+                            0x007b => {
+                                // cc is TABLE #07
+                                let dca = Dca::from_index(cc as u8);
+                                // dd is midi packed ascii (bruh)
+                                let data = [
+                                    dd[0] << 4 | dd[1] >> 3,
+                                    dd[1] << 5 | dd[2] >> 2,
+                                    dd[2] << 6 | dd[3] >> 1,
+                                    dd[3] << 7 | dd[4],
+                                ];
+                                // ind is 0 -> kNameShort1, 1 -> kNameShort2
+                                if ind == 0 {
+                                    self.last_dca_name_short_1 = Some((dca.clone(), data));
+                                }
+                                if ind == 1 {
+                                    self.last_dca_name_short_2 = Some((dca, data));
+                                }
+                                if let Some((dca_1, data_1)) = &self.last_dca_name_short_1
+                                    && let Some((dca_2, data_2)) = &self.last_dca_name_short_2
+                                    && dca_1 == dca_2
+                                {
+                                    let dca_name = data_1
+                                        .iter()
+                                        .cloned()
+                                        .chain(data_2.iter().cloned())
+                                        .collect();
+                                    let dca = dca_1.clone();
+                                    self.last_dca_name_short_1 = None;
+                                    self.last_dca_name_short_2 = None;
+                                    if let Ok(dca_name) = String::from_utf8(dca_name) {
+                                        return Some(std::iter::once(BoardEdit::DcaName(
+                                            dca, dca_name,
+                                        )));
+                                    }
+                                }
+                            }
+                            // Something else
+                            _ => (),
+                        }
+                    }
+                }
+                // We receive everything over SYSEX. See module docs for appropriate configuration
+                _ => (),
+            }
+        }
+        None::<std::iter::Once<_>>
     }
 }
 
@@ -107,8 +222,10 @@ fn send_channel_name(channel_ind: u8, name: &str) -> Vec<MidiMessage> {
 /// Send the sequence of midi messages which corresponds to the given NRPN control change
 /// Note: takes normal, not midi, bytes
 fn send_nrpn(param: u16, val: u16) -> Vec<MidiMessage> {
-    let (param_msb, param_lsb) = two_byte_midi_pack(param);
-    let (val_msb, val_lsb) = two_byte_midi_pack(val);
+    let param_msb = (param >> 8) as u8;
+    let param_lsb = param as u8;
+    let val_msb = (val >> 8) as u8;
+    let val_lsb = val as u8;
     vec![
         vec![
             // Control change + channel
@@ -147,9 +264,12 @@ fn send_nrpn(param: u16, val: u16) -> Vec<MidiMessage> {
 /// Send the midi sysex message to change parameter as given
 /// Note: takes normal, not midi, bytes
 fn send_prm_sysex(elem: u16, ind: u16, cc: u16, dd: [u8; 5]) -> MidiMessage {
-    let (e1, e2) = two_byte_midi_pack(elem);
-    let (i1, i2) = two_byte_midi_pack(ind);
-    let (c1, c2) = two_byte_midi_pack(cc);
+    let e1 = (elem >> 8) as u8;
+    let e2 = elem as u8;
+    let i1 = (ind >> 8) as u8;
+    let i2 = ind as u8;
+    let c1 = (cc >> 8) as u8;
+    let c2 = cc as u8;
     vec![
         // Sysex
         0xf0,
@@ -182,11 +302,20 @@ fn send_prm_sysex(elem: u16, ind: u16, cc: u16, dd: [u8; 5]) -> MidiMessage {
         0xf7,
     ]
 }
-/// Takes two normal bytes and packs them into two midi bytes. Note that this is lossy as midi
-/// bytes are 7 bits.
-fn two_byte_midi_pack(input: u16) -> (u8, u8) {
-    (
-        ((input >> 7) & 0b0111_1111) as u8,
-        (input & 0b0111_1111) as u8,
-    )
+/// Unpack a midi sysex message to change parameter into its arguments.
+fn recv_prm_sysex(content: &[u8]) -> Option<(u16, u16, u16, [u8; 5])> {
+    if content.len() == 0 {
+        return None;
+    }
+    // We accept messages both with and without the leading byte
+    let offset = if content[0] == 0xf0 { 1 } else { 0 };
+    if content.len() < 16 + offset {
+        return None;
+    }
+    Some((
+            (content[5+offset] as u16) << 8 | content[6+offset] as u16,
+            (content[7+offset] as u16) << 8 | content[8+offset] as u16,
+            (content[9+offset] as u16) << 8 | content[10+offset] as u16,
+            content[11+offset..16+offset].try_into().expect("Slice should be the correct size on account of it being sliced right here with the correct size")
+            ))
 }
