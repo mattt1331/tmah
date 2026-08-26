@@ -194,6 +194,7 @@ impl FileState {
 
 /// The different places a file can come from.
 pub enum FileSource {
+    // FIXME: BUG: I forgot to shove this in so ctrl-s doesn't work for files. pls fix
     LocalFile(local_file::FileSource),
     Clipboard,
 }

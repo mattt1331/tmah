@@ -141,7 +141,9 @@ where
                 match self.adaptor.send_board_edit(edit) {
                     Ok(messages) => {
                         for message in messages {
-                            output.send(&message);
+                            if let Err(err) = output.send(&message) {
+                                log::error!("Failed to send MIDI message: {err}");
+                            }
                         }
                     }
                     Err(err) => {
@@ -161,7 +163,9 @@ where
                     name.to_string(),
                 )) {
                     Ok(messages) => messages.for_each(|msg| {
-                        output.send(&msg);
+                        if let Err(err) = output.send(&msg) {
+                            log::error!("Failed to send MIDI message: {err}");
+                        }
                     }),
                     Err(err) => log::warn!(
                         "Tried to send channel name but encountered error adapting `BoardEdit` to correct format: {:?}",
