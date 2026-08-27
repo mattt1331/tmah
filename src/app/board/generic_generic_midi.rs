@@ -246,7 +246,7 @@ where
                 match input {
                     InputConnectionState::NoMidi(err) => {
                         ui.label(
-                            RichText::new("Failed to initialize MIDI input: {err}")
+                            RichText::new(format!("Failed to initialize MIDI input: {err}"))
                                 .color(Color32::RED),
                         );
                         if ui.button("Initialize MIDI input").clicked() {
@@ -255,7 +255,10 @@ where
                     }
                     InputConnectionState::YesMidiNoConnection(_, maybe_conn_err) => {
                         if let Some(err) = maybe_conn_err {
-                            ui.label(RichText::new("Failed to connect: {err}").color(Color32::RED));
+                            ui.label(
+                                RichText::new(format!("Failed to connect: {err}"))
+                                    .color(Color32::RED),
+                            );
                         }
                         egui::ComboBox::from_label("Select MIDI input corresponding to board")
                             .selected_text("Ports")

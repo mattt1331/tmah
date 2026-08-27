@@ -75,9 +75,10 @@ impl State {
             FileIoState::LoadingLocalFile(load_state) => {
                 match load_state.poll_loaded() {
                     Some(load_result) => match load_result {
-                        Ok(file_data) => {
+                        Ok((file_data, file_source)) => {
                             self.file_load_data(file_data);
                             self.file_state.io_state = FileIoState::Idle;
+                            self.file_state.loaded_file = Some(FileSource::LocalFile(file_source));
                             // We succeeded and are done
                             true
                         }
@@ -194,7 +195,6 @@ impl FileState {
 
 /// The different places a file can come from.
 pub enum FileSource {
-    // FIXME: BUG: I forgot to shove this in so ctrl-s doesn't work for files. pls fix
     LocalFile(local_file::FileSource),
     Clipboard,
 }

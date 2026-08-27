@@ -12,14 +12,14 @@ pub struct FileSource {
 /// Stores the progress of loading a local file
 pub struct LoadFileState {
     /// Receiver which will receive the file
-    rx: Receiver<FileData>,
+    rx: Receiver<(FileData, FileSource)>,
 }
 impl LoadFileState {
     /// Poll whether we are done loading the file. If we are still waiting, `None`. If we are done,
     /// `Some` with either the file or an oops
-    pub fn poll_loaded(&mut self) -> Option<Result<FileData, ()>> {
+    pub fn poll_loaded(&mut self) -> Option<Result<(FileData, FileSource), ()>> {
         match self.rx.try_recv() {
-            Ok(file_data) => Some(Ok(file_data)),
+            Ok(file) => Some(Ok(file)),
             Err(err) => match err {
                 // Nothing sent to us yet
                 mpsc::TryRecvError::Empty => None,
@@ -34,25 +34,57 @@ impl LoadFileState {
 pub fn begin_load() -> LoadFileState {
     let (tx, rx) = mpsc::channel();
     super::crimes::execute_asynchronously(async move {
-        let file = rfd::AsyncFileDialog::new()
-            .add_filter("show file", &["ron"])
-            .set_directory("/")
-            .pick_file()
-            .await;
-        if let Some(file) = file {
-            let data = file.read().await;
-            let file_data = ron::de::from_bytes::<FileData>(&data);
-            match file_data {
-                Ok(file_data) => {
-                    let _ = tx.send(file_data);
-                }
-                Err(err) => log::error!("Failed to deserialize file data: {err}"),
-            };
-        } else {
-            log::info!("File picker dialog did not return a file");
-        }
+        begin_load_helper(tx).await;
     });
     LoadFileState { rx }
+}
+
+/// This function pops up the file selector dialog and sends the selected file back through the
+/// channel. It needs to be conditionally compiled because on WASM we don't get or return the path
+/// to the file.
+#[cfg(not(target_arch = "wasm32"))]
+async fn begin_load_helper(tx: mpsc::Sender<(FileData, FileSource)>) {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("show file", &["ron"])
+        .set_directory("/")
+        .pick_file()
+        .await;
+    if let Some(file) = file {
+        let data = file.read().await;
+        let file_data = ron::de::from_bytes::<FileData>(&data);
+        match file_data {
+            Ok(file_data) => {
+                let file_source = FileSource {
+                    path: file.path().to_path_buf(),
+                };
+                let _ = tx.send((file_data, file_source));
+            }
+            Err(err) => log::error!("Failed to deserialize file data: {err}"),
+        };
+    } else {
+        log::info!("File picker dialog did not return a file");
+    }
+}
+#[cfg(target_arch = "wasm32")]
+async fn begin_load_helper(tx: mpsc::Sender<(FileData, FileSource)>) {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("show file", &["ron"])
+        .set_directory("/")
+        .pick_file()
+        .await;
+    if let Some(file) = file {
+        let data = file.read().await;
+        let file_data = ron::de::from_bytes::<FileData>(&data);
+        match file_data {
+            Ok(file_data) => {
+                let file_source = FileSource;
+                let _ = tx.send((file_data, file_source));
+            }
+            Err(err) => log::error!("Failed to deserialize file data: {err}"),
+        };
+    } else {
+        log::info!("File picker dialog did not return a file");
+    }
 }
 
 /// Stores the progress of saving to a local file
