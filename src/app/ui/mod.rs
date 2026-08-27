@@ -96,11 +96,14 @@ impl eframe::App for State {
                 self.file_save(ui);
             }
         });
+    }
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Do work that gets done each frame
         self.each_frame();
         // Try to run with at least 10FPS so that we do not accumulate a massive pile of unprocessed
         // messages from the board during the show
-        ui.request_repaint_after_secs(0.1);
+        ctx.request_repaint_after_secs(0.1);
+
     }
 }
 
