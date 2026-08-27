@@ -68,78 +68,70 @@ impl BoardEditAdaptor for YamahaM7CLMidi {
         // ChannelMute: kInputOn
         // ChannelDcaAssign: kInputDCA
         // DcaName: kDCAName
-        if let Some((_midi_channel, message)) = ParsedMidiMessage::from_bytes(&message) {
-            match message {
-                ParsedMidiMessage::Sysex(message) => {
-                    if let Some((elem, ind, cc, dd)) = recv_prm_sysex(&message) {
-                        match elem {
-                            // kInputOn
-                            0x0030 => {
-                                // channel is cc CH TABLE 1
-                                let channel = Channel::from_index(cc as u8);
-                                // data is off, on; 0, 1
-                                let mute = dd[0] == 0;
-                                return Some(std::iter::once(BoardEdit::ChannelMute(
-                                    channel, mute,
-                                )));
-                            }
-                            // kInputDCA
-                            0x003f => {
-                                // ind is dca index
-                                let dca = Dca::from_index(ind as u8);
-                                // cc is channel CH TABLE 1
-                                let channel = Channel::from_index(cc as u8);
-                                // data is not assign, assign; 0, 1
-                                let is_assigned = dd[0] != 0;
-                                return Some(std::iter::once(BoardEdit::ChannelDcaAssign(
-                                    channel,
-                                    dca,
-                                    is_assigned,
-                                )));
-                            }
-                            // kDcaName
-                            0x007b => {
-                                // cc is TABLE #07
-                                let dca = Dca::from_index(cc as u8);
-                                // dd is midi packed ascii (bruh)
-                                let data = [
-                                    dd[0] << 4 | dd[1] >> 3,
-                                    dd[1] << 5 | dd[2] >> 2,
-                                    dd[2] << 6 | dd[3] >> 1,
-                                    dd[3] << 7 | dd[4],
-                                ];
-                                // ind is 0 -> kNameShort1, 1 -> kNameShort2
-                                if ind == 0 {
-                                    self.last_dca_name_short_1 = Some((dca.clone(), data));
-                                }
-                                if ind == 1 {
-                                    self.last_dca_name_short_2 = Some((dca, data));
-                                }
-                                if let Some((dca_1, data_1)) = &self.last_dca_name_short_1
-                                    && let Some((dca_2, data_2)) = &self.last_dca_name_short_2
-                                    && dca_1 == dca_2
-                                {
-                                    let dca_name = data_1
-                                        .iter()
-                                        .cloned()
-                                        .chain(data_2.iter().cloned())
-                                        .collect();
-                                    let dca = dca_1.clone();
-                                    self.last_dca_name_short_1 = None;
-                                    self.last_dca_name_short_2 = None;
-                                    if let Ok(dca_name) = String::from_utf8(dca_name) {
-                                        return Some(std::iter::once(BoardEdit::DcaName(
-                                            dca, dca_name,
-                                        )));
-                                    }
-                                }
-                            }
-                            // Something else
-                            _ => (),
+        // We receive everything over SYSEX. See module docs for appropriate configuration
+        if let Some((_midi_channel, ParsedMidiMessage::Sysex(message))) = ParsedMidiMessage::from_bytes(&message)
+            // Parse the sysex content into its various elements
+            && let Some((elem, ind, cc, dd)) = recv_prm_sysex(&message)
+        {
+            match elem {
+                // kInputOn
+                0x0030 => {
+                    // channel is cc CH TABLE 1
+                    let channel = Channel::from_index(cc as u8);
+                    // data is off, on; 0, 1
+                    let mute = dd[0] == 0;
+                    return Some(std::iter::once(BoardEdit::ChannelMute(channel, mute)));
+                }
+                // kInputDCA
+                0x003f => {
+                    // ind is dca index
+                    let dca = Dca::from_index(ind as u8);
+                    // cc is channel CH TABLE 1
+                    let channel = Channel::from_index(cc as u8);
+                    // data is not assign, assign; 0, 1
+                    let is_assigned = dd[0] != 0;
+                    return Some(std::iter::once(BoardEdit::ChannelDcaAssign(
+                        channel,
+                        dca,
+                        is_assigned,
+                    )));
+                }
+                // kDcaName
+                0x007b => {
+                    // cc is TABLE #07
+                    let dca = Dca::from_index(cc as u8);
+                    // dd is midi packed ascii (bruh)
+                    let data = [
+                        dd[0] << 4 | dd[1] >> 3,
+                        dd[1] << 5 | dd[2] >> 2,
+                        dd[2] << 6 | dd[3] >> 1,
+                        dd[3] << 7 | dd[4],
+                    ];
+                    // ind is 0 -> kNameShort1, 1 -> kNameShort2
+                    if ind == 0 {
+                        self.last_dca_name_short_1 = Some((dca.clone(), data));
+                    }
+                    if ind == 1 {
+                        self.last_dca_name_short_2 = Some((dca, data));
+                    }
+                    if let Some((dca_1, data_1)) = &self.last_dca_name_short_1
+                        && let Some((dca_2, data_2)) = &self.last_dca_name_short_2
+                        && dca_1 == dca_2
+                    {
+                        let dca_name = data_1
+                            .iter()
+                            .cloned()
+                            .chain(data_2.iter().cloned())
+                            .collect();
+                        let dca = dca_1.clone();
+                        self.last_dca_name_short_1 = None;
+                        self.last_dca_name_short_2 = None;
+                        if let Ok(dca_name) = String::from_utf8(dca_name) {
+                            return Some(std::iter::once(BoardEdit::DcaName(dca, dca_name)));
                         }
                     }
                 }
-                // We receive everything over SYSEX. See module docs for appropriate configuration
+                // Something else
                 _ => (),
             }
         }
@@ -304,7 +296,7 @@ fn send_prm_sysex(elem: u16, ind: u16, cc: u16, dd: [u8; 5]) -> MidiMessage {
 }
 /// Unpack a midi sysex message to change parameter into its arguments.
 fn recv_prm_sysex(content: &[u8]) -> Option<(u16, u16, u16, [u8; 5])> {
-    if content.len() == 0 {
+    if content.is_empty() {
         return None;
     }
     // We accept messages both with and without the leading byte

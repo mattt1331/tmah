@@ -14,7 +14,7 @@ use std::sync::mpsc;
 /// The default value of the `num_channels_controlled` setting
 const DEFAULT_NUM_CH_CONTROL: u8 = 32;
 /// The default value of the `num_dcas_controlled` setting
-const DEFAULT_NUM_DCA_CONTROL: u8 = 32;
+const DEFAULT_NUM_DCA_CONTROL: u8 = 8;
 /// Name of the application in MIDI
 const MIDI_CLIENT_NAME: &str = "miq-v2";
 /// Certain MIDI implementations have a name for the connection
@@ -71,13 +71,10 @@ where
             board_state_cache,
         } = &mut self.conn
         {
-            while let Ok(midi_message) = callback_receiver.try_recv() {
-                // TODO: Again, this is inefficient and we should not have to allocate like this
-                self.adaptor
-                    .recv_board_message(midi_message)
-                    .map(|board_edit| {
-                        board_edit.for_each(|edit| board_state_cache.apply_board_edit(&edit))
-                    });
+            while let Ok(midi_message) = callback_receiver.try_recv()
+                && let Some(board_edit) = self.adaptor.recv_board_message(midi_message)
+            {
+                board_edit.for_each(|edit| board_state_cache.apply_board_edit(&edit));
             }
         } else {
             log::warn!("Cannot update board state cache because we are not connected");
@@ -239,9 +236,7 @@ where
                         }
                     }
                     OutputConnectionState::Connected(_) => {
-                        ui.label(
-                            RichText::new(format!("MIDI output connected")).color(Color32::GREEN),
-                        );
+                        ui.label(RichText::new("MIDI output connected").color(Color32::GREEN));
                         if ui.button("Disconnect output").clicked() {
                             take_mut::take(output, |output| output.disconnect());
                         }
@@ -251,7 +246,7 @@ where
                 match input {
                     InputConnectionState::NoMidi(err) => {
                         ui.label(
-                            RichText::new(format!("Failed to initialize MIDI input: {err}"))
+                            RichText::new("Failed to initialize MIDI input: {err}")
                                 .color(Color32::RED),
                         );
                         if ui.button("Initialize MIDI input").clicked() {
@@ -260,10 +255,7 @@ where
                     }
                     InputConnectionState::YesMidiNoConnection(_, maybe_conn_err) => {
                         if let Some(err) = maybe_conn_err {
-                            ui.label(
-                                RichText::new(format!("Failed to connect: {err}"))
-                                    .color(Color32::RED),
-                            );
+                            ui.label(RichText::new("Failed to connect: {err}").color(Color32::RED));
                         }
                         egui::ComboBox::from_label("Select MIDI input corresponding to board")
                             .selected_text("Ports")
@@ -296,9 +288,7 @@ where
                         }
                     }
                     InputConnectionState::Connected(..) => {
-                        ui.label(
-                            RichText::new(format!("MIDI input connected")).color(Color32::GREEN),
-                        );
+                        ui.label(RichText::new("MIDI input connected").color(Color32::GREEN));
                         if ui.button("Disconnect input").clicked() {
                             take_mut::take(input, |input| input.disconnect());
                         }

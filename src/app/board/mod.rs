@@ -4,15 +4,15 @@
 //! board to the ui dropdown). In addition to this trait, there are several submodules containing
 //! useful tools for implementing the connection.
 //! - `data`: Contains types commonly used throughout the application to represent things related
-//! to boards.
+//!   to boards.
 //! - `board_messages`: Contains the `BoardEditAdaptor` trait and implementations. `BoardEdit` is
-//! an enumeration of all edits to the board that we support and each implementation of the
-//! `BoardEditAdaptor` trait knows how to convert that edit into a message for each particular
-//! board. This setup is nice because it allows us to reuse connection logic and keep it separate
-//! from the details of the board's protocol.
+//!   an enumeration of all edits to the board that we support and each implementation of the
+//!   `BoardEditAdaptor` trait knows how to convert that edit into a message for each particular
+//!   board. This setup is nice because it allows us to reuse connection logic and keep it separate
+//!   from the details of the board's protocol.
 //! - `board_state_cache`: Contains the `BoardStateCache` type, which lets us track a board's state
-//! and knows how to use that knowledge to efficiently bring the board to a desired state without
-//! sending unnecessary messages.
+//!   and knows how to use that knowledge to efficiently bring the board to a desired state without
+//!   sending unnecessary messages.
 
 // Types used by this module to represent data common to all boards
 mod data;

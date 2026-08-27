@@ -62,7 +62,7 @@ impl MidiMessage {
         }
     }
     pub fn from_bytes(bytes: &[u8]) -> Option<(Option<MidiChannel>, MidiMessage)> {
-        if bytes.len() == 0 {
+        if bytes.is_empty() {
             return None;
         }
         match bytes[0] {
@@ -74,10 +74,7 @@ impl MidiMessage {
                     );
                     return None;
                 }
-                Some((
-                    None,
-                    MidiMessage::Sysex(bytes[1..bytes.len() - 1].iter().copied().collect()),
-                ))
+                Some((None, MidiMessage::Sysex(bytes[1..bytes.len() - 1].to_vec())))
             }
             byte => match byte & 0b1111_0000 {
                 0b1011_0000 => {

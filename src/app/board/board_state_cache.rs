@@ -70,9 +70,7 @@ impl BoardStateCache {
                 Some(dca) => dca.assigned(),
                 None => &BTreeSet::new(),
             };
-            if let Some(current_assignments) =
-                self.dca_assignments.get(&Dca::from_index(dca_ind as u8))
-            {
+            if let Some(current_assignments) = self.dca_assignments.get(&Dca::from_index(dca_ind)) {
                 // We know the current state of this dca
                 // Channels to add: cue - state
                 // Channels to remove: state - cue
@@ -83,7 +81,7 @@ impl BoardStateCache {
                             if channel.index() < num_channels {
                                 Some(BoardEdit::ChannelDcaAssign(
                                     channel.clone(),
-                                    Dca::from_index(dca_ind as u8),
+                                    Dca::from_index(dca_ind),
                                     true,
                                 ))
                             } else {
@@ -98,7 +96,7 @@ impl BoardStateCache {
                             if channel.index() < num_channels {
                                 Some(BoardEdit::ChannelDcaAssign(
                                     channel.clone(),
-                                    Dca::from_index(dca_ind as u8),
+                                    Dca::from_index(dca_ind),
                                     false,
                                 ))
                             } else {
@@ -110,18 +108,18 @@ impl BoardStateCache {
                 // We do not know the current state of this DCA. Fire every channel.
                 for ch_ind in 0..num_channels {
                     let ch = Channel::from_index(ch_ind);
-                    if matches!(new_dca_assign.get(&ch), Some(_)) {
+                    if new_dca_assign.get(&ch).is_some() {
                         // Channel is assigned to DCA
                         channel_assigns.push(BoardEdit::ChannelDcaAssign(
                             ch,
-                            Dca::from_index(dca_ind as u8),
+                            Dca::from_index(dca_ind),
                             true,
                         ));
                     } else {
                         // Channel is unassigned from DCA
                         channel_unassigns.push(BoardEdit::ChannelDcaAssign(
                             ch,
-                            Dca::from_index(dca_ind as u8),
+                            Dca::from_index(dca_ind),
                             false,
                         ));
                     }
@@ -135,7 +133,7 @@ impl BoardStateCache {
     fn cue_diff_channel_mutes(&self, cue: &Cue, num_channels: u8, num_dcas: u8) -> Vec<BoardEdit> {
         let mut channel_mutes: Vec<BoardEdit> = Vec::new();
         for ch_ind in 0..num_channels {
-            if ch_ind >= num_channels.into() {
+            if ch_ind >= num_channels {
                 break;
             }
             let ch = Channel::from_index(ch_ind);
@@ -145,7 +143,7 @@ impl BoardStateCache {
                 if dca_ind >= num_dcas.into() {
                     break;
                 }
-                if let Some(_) = new_dca.assigned().get(&ch) {
+                if new_dca.assigned().get(&ch).is_some() {
                     is_channel_muted = false;
                     break;
                 }
@@ -205,15 +203,14 @@ impl BoardStateCache {
                     Some(dca) => dca.name(channel_names),
                     None => "".to_string(),
                 };
-                if let Some(current_name) = self.dca_names.get(&Dca::from_index(dca_ind as u8)) {
+                if let Some(current_name) = self.dca_names.get(&Dca::from_index(dca_ind)) {
                     // We know the current name, send it if it's wrong
                     if *current_name != new_name {
-                        dca_names
-                            .push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
+                        dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind), new_name));
                     }
                 } else {
                     // We do not know the current name, send it
-                    dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind as u8), new_name));
+                    dca_names.push(BoardEdit::DcaName(Dca::from_index(dca_ind), new_name));
                 }
             }
         }
