@@ -10,6 +10,7 @@ pub use board::Decibels;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Top level of program state
+// TODO: Rename/reorganize all of these elements to have the correct prefixes (cues_, file_, board_)
 pub struct State {
     // Actual program state
     cues: BTreeMap<CueNumber, Cue>,
@@ -58,9 +59,6 @@ impl Default for State {
 
 /// Basic getters and setters
 impl State {
-    pub fn new(_cc: &eframe::CreationContext) -> Self {
-        Self::default()
-    }
     pub fn num_dcas(&self) -> u8 {
         self.connection.num_dcas()
     }
@@ -94,6 +92,21 @@ impl State {
 }
 /// Methods with additional logic
 impl State {
+    /// The key for eframe's persistent storage where we will autosave the file to
+    const PERSISTANT_STORAGE_KEY: &str = "miq_v2.file_data";
+    /// Create a new `State` and load any persisted values
+    pub fn new(cc: &eframe::CreationContext) -> Self {
+        let mut out = Self::default();
+        if let Some(storage) = cc.storage
+            && let Some(persist_data) = storage.get_string(Self::PERSISTANT_STORAGE_KEY)
+        {
+            match file::FileData::deserialize(persist_data.as_bytes()) {
+                Ok(file_data) => out.file_load_data(file_data),
+                Err(err) => log::error!("Failed to load persisted data: {err}"),
+            }
+        }
+        out
+    }
     /// Should get called every frame.
     pub fn each_frame(&mut self) {
         // Each connection is allowed to do some work each frame

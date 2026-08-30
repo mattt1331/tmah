@@ -51,7 +51,7 @@ async fn begin_load_helper(tx: mpsc::Sender<(FileData, FileSource)>) {
         .await;
     if let Some(file) = file {
         let data = file.read().await;
-        let file_data = ron::de::from_bytes::<FileData>(&data);
+        let file_data = FileData::deserialize(&data);
         match file_data {
             Ok(file_data) => {
                 let file_source = FileSource {
@@ -74,7 +74,7 @@ async fn begin_load_helper(tx: mpsc::Sender<(FileData, FileSource)>) {
         .await;
     if let Some(file) = file {
         let data = file.read().await;
-        let file_data = ron::de::from_bytes::<FileData>(&data);
+        let file_data = FileData::deserialize(&data);
         match file_data {
             Ok(file_data) => {
                 let file_source = FileSource;

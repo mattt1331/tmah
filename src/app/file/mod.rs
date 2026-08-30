@@ -14,7 +14,7 @@ pub struct FileData {
 }
 impl FileData {
     /// Serializes data to RON as a string
-    fn serialize(&self) -> Result<String, ()> {
+    pub fn serialize(&self) -> Result<String, ()> {
         match ron::to_string(self) {
             Ok(data) => Ok(data),
             Err(err) => {
@@ -22,6 +22,10 @@ impl FileData {
                 Err(())
             }
         }
+    }
+    /// Deserialize RON data into a `FileData`
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, ron::error::SpannedError> {
+        ron::de::from_bytes(bytes)
     }
 }
 /// Extracting/inserting data to save/saved data
@@ -125,7 +129,7 @@ impl State {
     }
     /// Try to load a file from the input field that you can paste into
     pub fn file_try_load_from_clipboard_buffer(&mut self) {
-        match ron::de::from_str(&self.file_state.ui_from_clipboard_buffer) {
+        match FileData::deserialize(self.file_state.ui_from_clipboard_buffer.as_bytes()) {
             Ok(file_data) => {
                 self.file_state.loaded_file = Some(FileSource::Clipboard);
                 self.file_state.ui_from_clipboard_buffer.clear();

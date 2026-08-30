@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 # GUI lib and extra widgets
-eframe = "0.34.2"
+eframe = { version = "0.34.2", features = ["persistence"] }
 egui_extras = "0.34.2"
 # Logging interface, to stdout/err
 log = "0.4.29"

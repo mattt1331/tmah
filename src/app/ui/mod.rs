@@ -103,7 +103,13 @@ impl eframe::App for State {
         // Try to run with at least 10FPS so that we do not accumulate a massive pile of unprocessed
         // messages from the board during the show
         ctx.request_repaint_after_secs(0.1);
-
+    }
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let file_data = self.file_get_data();
+        if let Ok(data) = file_data.serialize() {
+            storage.set_string(Self::PERSISTANT_STORAGE_KEY, data);
+            storage.flush();
+        }
     }
 }
 
