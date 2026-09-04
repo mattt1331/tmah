@@ -140,11 +140,11 @@ impl State {
 
         // If a DCA was double clicked, edit its assignment
         if let Some((i, j)) = double_clicked_cell {
-            let dca = self.cues().values().nth(i).map(|cue| &cue.dcas[j]);
+            let dca = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]);
             self.cues_do_edit_action(CuesEditAction::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
-                original_dca_name: dca.and_then(|dca| dca.name.clone()),
+                original_dca_name: dca.and_then(|dca| dca.assigned_name().clone()),
                 original_assignment: dca.map(|dca| dca.assigned().clone()).unwrap_or_default(),
             });
         }
