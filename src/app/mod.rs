@@ -12,16 +12,12 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Top level of program state
 // TODO: Rename/reorganize all of these elements to have the correct prefixes (cues_, file_, board_)
 pub struct State {
-    // Actual program state
-    cues: BTreeMap<CueNumber, Cue>,
-    ch_names: ChannelNames,
-    connection: Box<dyn board::Connectable>,
-
-    /// State related to loading show files
-    file_state: file::FileState,
-
-    // UI state etc
     ui_screen: ui::UiScreen,
+
+
+    // Cues
+    cues: BTreeMap<CueNumber, Cue>,
+    cues_ch_names: ChannelNames,
     /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
     cues_edit_action: ui::CuesEditAction,
     cues_selected_cue_ind: Option<usize>,
@@ -30,10 +26,18 @@ pub struct State {
     /// undo is pressed, pop off the last one and run it on `State`. When an undoable action
     /// occurs, add the undo action to the stack.
     cues_undo_stack: Vec<Box<UndoAction>>,
+
+
+    // Board
+    board_connection: Box<dyn board::Connectable>,
     /// The connection selected in the dropdown on the board screen
-    connection_ui: board::Connections,
+    board_connection_ui: board::Connections,
     /// The currently active connection to difference with above
-    connection_ui_prev: board::Connections,
+    board_connection_ui_prev: board::Connections,
+
+
+    // File
+    file_state: file::FileState,
 }
 
 type UndoAction = dyn FnOnce(&mut State);
@@ -42,8 +46,8 @@ impl Default for State {
     fn default() -> Self {
         State {
             cues: BTreeMap::new(),
-            ch_names: ChannelNames::default(),
-            connection: Box::new(board::NoConnection::new()),
+            cues_ch_names: ChannelNames::default(),
+            board_connection: Box::new(board::NoConnection::new()),
 
             file_state: file::FileState::default(),
 
@@ -51,8 +55,8 @@ impl Default for State {
             cues_edit_action: ui::CuesEditAction::default(),
             cues_selected_cue_ind: None,
             cues_undo_stack: Vec::default(),
-            connection_ui: board::Connections::default(),
-            connection_ui_prev: board::Connections::default(),
+            board_connection_ui: board::Connections::default(),
+            board_connection_ui_prev: board::Connections::default(),
         }
     }
 }
@@ -60,10 +64,10 @@ impl Default for State {
 /// Basic getters and setters
 impl State {
     pub fn num_dcas(&self) -> u8 {
-        self.connection.num_dcas()
+        self.board_connection.num_dcas()
     }
     pub fn num_channels(&self) -> u8 {
-        self.connection.num_channels()
+        self.board_connection.num_channels()
     }
     pub fn cues(&self) -> &BTreeMap<CueNumber, Cue> {
         &self.cues
@@ -71,11 +75,11 @@ impl State {
     pub fn cues_mut(&mut self) -> &mut BTreeMap<CueNumber, Cue> {
         &mut self.cues
     }
-    pub fn channel_names(&self) -> &ChannelNames {
-        &self.ch_names
+    pub fn cues_channel_names(&self) -> &ChannelNames {
+        &self.cues_ch_names
     }
-    pub fn channel_names_mut(&mut self) -> &mut ChannelNames {
-        &mut self.ch_names
+    pub fn cues_channel_names_mut(&mut self) -> &mut ChannelNames {
+        &mut self.cues_ch_names
     }
     pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
         &self.cues_edit_action
@@ -83,11 +87,11 @@ impl State {
     pub fn cues_edit_action_mut(&mut self) -> &mut ui::CuesEditAction {
         &mut self.cues_edit_action
     }
-    pub fn selected_cue(&self) -> Option<usize> {
+    pub fn cues_selected_cue(&self) -> Option<usize> {
         self.cues_selected_cue_ind
     }
-    pub fn connection(&self) -> &Box<dyn board::Connectable> {
-        &self.connection
+    pub fn board_connection(&self) -> &Box<dyn board::Connectable> {
+        &self.board_connection
     }
 }
 /// Methods with additional logic
@@ -110,11 +114,11 @@ impl State {
     /// Should get called every frame.
     pub fn each_frame(&mut self) {
         // Each connection is allowed to do some work each frame
-        self.connection.heartbeat();
+        self.board_connection.heartbeat();
     }
     /// Adds the given cue at the given number.
     /// UNDO: If `no_undo` is false, stacks an undo action.
-    pub fn add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
+    pub fn cues_add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue at this number
         if self.cues.contains_key(&number) {
             log::warn!("Did not insert cue because this number is already occupied");
@@ -122,34 +126,34 @@ impl State {
         }
         self.cues.insert(number.clone(), cue);
         if !no_undo && let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
-            self.do_cues_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind });
+            self.cues_do_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind });
             self.cues_stack_undo_action(Box::new(move |state| {
-                state.delete_cue(&number, true);
+                state.cues_delete_cue(&number, true);
             }));
         }
     }
     /// Deletes the cue at the specified number.
     /// UNDO: If `no_undo` is false, stacks an undo action.
-    pub fn delete_cue(&mut self, number: &CueNumber, no_undo: bool) {
+    pub fn cues_delete_cue(&mut self, number: &CueNumber, no_undo: bool) {
         let removed_cue = self.cues.remove(number);
         if !no_undo && let Some(removed_cue) = removed_cue {
             let number = number.clone();
             self.cues_stack_undo_action(Box::new(move |state| {
-                state.add_cue(removed_cue, number, true);
+                state.cues_add_cue(removed_cue, number, true);
             }));
         }
         // Update index
         if let Some(sel_ind) = self.cues_selected_cue_ind {
             if sel_ind > 0 {
-                self.set_selected_cue(Some(sel_ind - 1));
+                self.cues_set_selected(Some(sel_ind - 1));
             } else {
-                self.set_selected_cue(None);
+                self.cues_set_selected(None);
             }
         }
     }
     /// Move the cue at `start_index` to `end_number`.
     /// UNDO: If `no_undo` is false, stacks an undo action.
-    pub fn renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
+    pub fn cues_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue with `end_number`
         if !self.cues.contains_key(&end_num) {
             // Get the cue we are renumbering
@@ -158,7 +162,7 @@ impl State {
 
                 if !no_undo {
                     self.cues_stack_undo_action(Box::new(move |state| {
-                        state.renumber_cue(end_num, start_num, true);
+                        state.cues_renumber_cue(end_num, start_num, true);
                     }));
                 }
             } else {
@@ -180,15 +184,15 @@ impl State {
     }
     /// Commences the given edit action. If another edit action is already active, ends that
     /// action.
-    pub fn do_cues_edit_action(&mut self, action: ui::CuesEditAction) {
+    pub fn cues_do_edit_action(&mut self, action: ui::CuesEditAction) {
         if !matches!(self.cues_edit_action, ui::CuesEditAction::None) {
-            self.end_cues_edit_action();
+            self.cues_end_edit_action();
         }
         self.cues_edit_action = action;
     }
     /// Ends any active cues edit action. For actions which edit state continuously (eg dca assign
     /// popup), stacks an undo action.
-    pub fn end_cues_edit_action(&mut self) {
+    pub fn cues_end_edit_action(&mut self) {
         match self.cues_edit_action {
             ui::CuesEditAction::None => return,
             ui::CuesEditAction::EditChannelNames => {
@@ -227,7 +231,7 @@ impl State {
     }
     /// Sets the selected cue to the given index, validating the index. If `None` is given instead,
     /// deselect any selected cue.
-    pub fn set_selected_cue(&mut self, cue_ind: Option<usize>) {
+    pub fn cues_set_selected(&mut self, cue_ind: Option<usize>) {
         if let Some(ind) = cue_ind
             && ind < self.cues.len()
         {
@@ -243,7 +247,7 @@ impl State {
                 // FIX: There has to be a better way to do this. Maybe switch to selected cue
                 // number, not index?
                 let cue = cue.clone();
-                self.connection.fire_cue(&cue);
+                self.board_connection.fire_cue(&cue);
             } else {
                 log::error!(
                     "Fire cue function called but the selected cue at index {ind} could not be found"
@@ -254,16 +258,16 @@ impl State {
     /// Increments selection index and fires the newly selected cue.
     pub fn fire_next_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
-            self.set_selected_cue(Some(ind + 1));
+            self.cues_set_selected(Some(ind + 1));
             self.fire_selected_cue();
         } else {
-            self.set_selected_cue(Some(0));
+            self.cues_set_selected(Some(0));
             self.fire_selected_cue();
         }
     }
     /// Sends the channel names to the board.
     pub fn fire_channel_names(&mut self) {
-        self.connection.fire_channel_names(&self.ch_names);
+        self.board_connection.fire_channel_names(&self.cues_ch_names);
     }
 }
 

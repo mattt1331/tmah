@@ -60,30 +60,30 @@ impl eframe::App for State {
                 UiScreen::Board => {
                     // Dropdown box to select connection
                     egui::ComboBox::from_label("Select connection type")
-                        .selected_text(format!("{:?}", self.connection_ui))
+                        .selected_text(format!("{:?}", self.board_connection_ui))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(
-                                &mut self.connection_ui,
+                                &mut self.board_connection_ui,
                                 board::Connections::None,
                                 "None",
                             );
                             ui.selectable_value(
-                                &mut self.connection_ui,
+                                &mut self.board_connection_ui,
                                 board::Connections::YamahaM7CLMidi,
                                 "Yamaha M7CL over MIDI",
                             );
                         });
                     // Button to activate selected connection
-                    if self.connection_ui != self.connection_ui_prev {
+                    if self.board_connection_ui != self.board_connection_ui_prev {
                         let response = ui.button("Activate selected connection");
                         if response.clicked() {
-                            self.connection_ui_prev = self.connection_ui.clone();
-                            self.connection = self.connection_ui.clone().construct();
+                            self.board_connection_ui_prev = self.board_connection_ui.clone();
+                            self.board_connection = self.board_connection_ui.clone().construct();
                         }
                     }
                     ui.add_space(10.0);
                     // Ui specific to the connection
-                    self.connection.ui(ui);
+                    self.board_connection.ui(ui);
                 }
             }
 
@@ -124,13 +124,13 @@ impl State {
             if ui.button("Add cue at bot.").clicked() {
                 let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
                 new_bottom_num.increment_lowest();
-                self.add_cue(super::Cue::default(), new_bottom_num, false);
+                self.cues_add_cue(super::Cue::default(), new_bottom_num, false);
             }
             if ui.button("Undo").clicked() {
                 self.cues_do_undo();
             }
             if ui.button("Channel names").clicked() {
-                self.do_cues_edit_action(CuesEditAction::EditChannelNames);
+                self.cues_do_edit_action(CuesEditAction::EditChannelNames);
             }
         });
         ui.add_space(10.0);
@@ -141,7 +141,7 @@ impl State {
         // If a DCA was double clicked, edit its assignment
         if let Some((i, j)) = double_clicked_cell {
             let dca = self.cues().values().nth(i).map(|cue| &cue.dcas[j]);
-            self.do_cues_edit_action(CuesEditAction::EditDcaAssign {
+            self.cues_do_edit_action(CuesEditAction::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
                 original_dca_name: dca.and_then(|dca| dca.name.clone()),
@@ -151,11 +151,11 @@ impl State {
 
         // If del key pressed, delete selected cue
         if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
-            && let Some(index) = self.selected_cue()
+            && let Some(index) = self.cues_selected_cue()
             && let Some(cue_num) = self.cues().keys().nth(index)
         {
             let cue_num = cue_num.clone();
-            self.delete_cue(&cue_num, false);
+            self.cues_delete_cue(&cue_num, false);
         }
 
         // Space to GO
@@ -205,7 +205,7 @@ impl State {
                     let i = row.index();
 
                     // Selected row
-                    if let Some(sel_ind) = self.selected_cue()
+                    if let Some(sel_ind) = self.cues_selected_cue()
                         && sel_ind == i
                     {
                         row.set_selected(true);
@@ -227,13 +227,13 @@ impl State {
                                 if let Ok(new_cue_num) = input
                                     && let Some(current_cue_num) = self.cues().keys().nth(cue_ind)
                                 {
-                                    self.renumber_cue(
+                                    self.cues_renumber_cue(
                                         (*current_cue_num).clone(),
                                         new_cue_num,
                                         false,
                                     );
                                 }
-                                self.end_cues_edit_action();
+                                self.cues_end_edit_action();
                             }
                             response.request_focus();
                         } else {
@@ -255,7 +255,7 @@ impl State {
                             .nth(i)
                             .map(|n| n.to_string())
                             .unwrap_or("?".to_string());
-                        self.do_cues_edit_action(CuesEditAction::RenumberCue {
+                        self.cues_do_edit_action(CuesEditAction::RenumberCue {
                             cue_ind: i,
                             input_text: cue_num,
                         })
@@ -273,7 +273,7 @@ impl State {
                                 if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
                                     let response = ui.text_edit_singleline(cue.edit_name());
                                     if response.lost_focus() {
-                                        self.end_cues_edit_action();
+                                        self.cues_end_edit_action();
                                     }
                                     response.request_focus();
                                 } else {
@@ -292,13 +292,13 @@ impl State {
                         });
                     });
                     if desc_response.1.double_clicked() {
-                        self.do_cues_edit_action(CuesEditAction::EditCueDesc { cue_ind: i })
+                        self.cues_do_edit_action(CuesEditAction::EditCueDesc { cue_ind: i })
                     }
                     // DCAs
                     if let Some(cue) = &self.cues().values().nth(i) {
                         for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
                             let (_, response) = row.col(|ui| {
-                                let dca_name = dca.name(self.channel_names());
+                                let dca_name = dca.name(self.cues_channel_names());
                                 if !dca_name.is_empty() {
                                     let layout = egui::Layout::top_down(egui::Align::Center)
                                         .with_main_justify(true)
@@ -328,7 +328,7 @@ impl State {
                         }
                         // Select row if clicked
                         if row.response().clicked() {
-                            self.set_selected_cue(Some(i));
+                            self.cues_set_selected(Some(i));
                             self.fire_selected_cue();
                         }
                     } else {
@@ -343,7 +343,7 @@ impl State {
         let ctx = ui.ctx();
         if !ctx.egui_wants_keyboard_input() && ctx.input(|input| input.key_down(egui::Key::Escape))
         {
-            self.end_cues_edit_action();
+            self.cues_end_edit_action();
         }
         match *self.cues_edit_action() {
             CuesEditAction::None => (),
@@ -356,7 +356,7 @@ impl State {
                         // Button to send channel names
                         if ui
                             .add_enabled(
-                                self.connection().connected(),
+                                self.board_connection().connected(),
                                 egui::Button::new("Send channel names to board"),
                             )
                             .clicked()
@@ -387,7 +387,7 @@ impl State {
                                             return;
                                         };
                                         ui.text_edit_singleline(
-                                            self.channel_names_mut()
+                                            self.cues_channel_names_mut()
                                                 .edit_name(&Channel::from_index(i)),
                                         );
                                     });
@@ -432,7 +432,7 @@ impl State {
             egui::Window::new("Edit DCA Assignments")
                 .title_bar(false)
                 .show(ui.ctx(), |ui| {
-                    let dca_name = copied_cue.dcas()[*dca_ind].name(self.channel_names());
+                    let dca_name = copied_cue.dcas()[*dca_ind].name(self.cues_channel_names());
                     let dca_name = if !dca_name.is_empty() {
                         dca_name
                     } else {
@@ -468,7 +468,7 @@ impl State {
                     let assigned_pre = assigned.clone();
                     for i in 0..num_channels {
                         let ch_name = self
-                            .channel_names()
+                            .cues_channel_names()
                             .get_name(&Channel::from_index(i))
                             .unwrap_or_else(|| format!("Channel {}", i + 1));
                         let ch_name = if !ch_name.is_empty() {

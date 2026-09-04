@@ -36,13 +36,13 @@ impl State {
         // Do that first pls
         FileData {
             cues: self.cues.clone(),
-            channel_names: self.ch_names.clone(),
+            channel_names: self.cues_ch_names.clone(),
         }
     }
     /// Loads the given data (ie sets state equal to provided values)
     pub fn file_load_data(&mut self, data: FileData) {
         self.cues = data.cues;
-        self.ch_names = data.channel_names;
+        self.cues_ch_names = data.channel_names;
     }
 }
 
