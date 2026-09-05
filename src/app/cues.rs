@@ -9,12 +9,12 @@ impl super::State {
     /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn cues_add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue at this number
-        if self.cues.contains_key(&number) {
+        if self.cues().contains_key(&number) {
             log::warn!("Did not insert cue because this number is already occupied");
             return;
         }
-        self.cues.insert(number.clone(), cue);
-        if !no_undo && let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
+        self.cues_mut().insert(number.clone(), cue);
+        if !no_undo && let Some(cue_ind) = self.cues_mut().keys().position(|c| *c == number) {
             self.cues_do_edit_action(ui::CuesUiMode::EditCueDesc { cue_ind });
             self.cues_stack_undo_action(Box::new(move |state| {
                 state.cues_delete_cue(&number, true);
@@ -24,7 +24,7 @@ impl super::State {
     /// Deletes the cue at the specified number.
     /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn cues_delete_cue(&mut self, number: &CueNumber, no_undo: bool) {
-        let removed_cue = self.cues.remove(number);
+        let removed_cue = self.cues_mut().remove(number);
         if !no_undo && let Some(removed_cue) = removed_cue {
             let number = number.clone();
             self.cues_stack_undo_action(Box::new(move |state| {
@@ -44,10 +44,10 @@ impl super::State {
     /// UNDO: If `no_undo` is false, stacks an undo action.
     pub fn cues_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
         // Check that there isn't already a cue with `end_number`
-        if !self.cues.contains_key(&end_num) {
+        if !self.cues().contains_key(&end_num) {
             // Get the cue we are renumbering
-            if let Some(cue) = self.cues.remove(&start_num) {
-                self.cues.insert(end_num.clone(), cue);
+            if let Some(cue) = self.cues_mut().remove(&start_num) {
+                self.cues_mut().insert(end_num.clone(), cue);
 
                 if !no_undo {
                     self.cues_stack_undo_action(Box::new(move |state| {
@@ -62,7 +62,7 @@ impl super::State {
         }
     }
     /// Adds the given undo action to the top of the undo stack.
-    pub fn cues_stack_undo_action(&mut self, action: Box<UndoAction>) {
+    pub fn cues_stack_undo_action(&mut self, action: Box<CuesEditAction>) {
         self.cues_undo_stack.push(action);
     }
     /// Executes the undo action at the top of the stack and pops it off of the stack.
@@ -96,7 +96,7 @@ impl super::State {
                 let original_dca_name = original_dca_name.clone();
                 let original_assignment = original_assignment.clone();
                 self.cues_stack_undo_action(Box::new(move |state| {
-                    let dca = state.cues.values_mut().nth(cue_ind)
+                    let dca = state.cues_mut().values_mut().nth(cue_ind)
                         .map(|cue| &mut cue.dcas[dca_ind]);
                     if let Some(dca) = dca {
                         dca.name = original_dca_name;
@@ -118,20 +118,109 @@ impl super::State {
         }
         self.cues_ui_mode = ui::CuesUiMode::None;
     }
+}
+/// Functions used by the cues ui. Functions with the `exec` prefix do the thing, whereas their
+/// counterparts without will also stack undos.
+impl super::State {
     /// Sets the selected cue to the given index, validating the index. If `None` is given instead,
     /// deselect any selected cue.
     pub fn cues_set_selected(&mut self, cue_ind: Option<usize>) {
         if let Some(ind) = cue_ind
-            && ind < self.cues.len()
+            && ind < self.cues().len()
         {
             self.cues_selected_cue_ind = cue_ind;
         } else {
             self.cues_selected_cue_ind = None;
         }
     }
+    /// Checks whether we can undo right now.
+    pub fn cues_can_undo(&self) -> bool {
+        self.cues_action_stack.len() - self.cues_action_stack_backtracks > 0
+    }
+    /// Executes the undo action at the top of the stack and pops it off of the stack.
+    pub fn cues_undo(&mut self) {
+        if self.cues_can_undo() {
+            self.cues_action_stack
+                [self.cues_action_stack.len() - self.cues_action_stack_backtracks - 1]
+                .0(&mut self.cues_data);
+            self.cues_action_stack_backtracks += 1;
+        }
+    }
+    /// Adds the given undo/redo action to the top of the stack, discarding any actions which could
+    /// be redone from this point.
+    pub fn cues_stack_action(
+        &mut self,
+        backwards_action: Box<CuesEditActionPrime>,
+        forwards_action: Box<CuesEditActionPrime>,
+    ) {
+        self.cues_action_stack
+            .truncate(self.cues_action_stack.len() - self.cues_action_stack_backtracks);
+        self.cues_action_stack
+            .push((backwards_action, forwards_action));
+        self.cues_action_stack_backtracks = 0;
+    }
+    /// Adds the given cue at the given number.
+    pub fn cues_exec_add_cue(&mut self, cue: Cue, number: CueNumber) {
+        // Check that there isn't already a cue at this number
+        if self.cues().contains_key(&number) {
+            log::warn!("Did not insert cue because this number is already occupied");
+            return;
+        }
+        self.cues_mut().insert(number, cue);
+    }
+    /// Deletes the cue at the specified number and returns it.
+    pub fn cues_exec_delete_cue(&mut self, number: &CueNumber) -> Option<Cue> {
+        let removed_cue = self.cues_mut().remove(number);
+        // Update index
+        if removed_cue.is_some()
+            && let Some(sel_ind) = self.cues_selected_cue_ind
+        {
+            if sel_ind > 0 {
+                self.cues_set_selected(Some(sel_ind - 1));
+            } else {
+                self.cues_set_selected(None);
+            }
+        }
+        removed_cue
+    }
+    /// Move the cue at `start_index` to `end_number`.
+    pub fn cues_exec_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber) {
+        // Check that there isn't already a cue with `end_number`
+        if !self.cues().contains_key(&end_num) {
+            // Get the cue we are renumbering
+            if let Some(cue) = self.cues_mut().remove(&start_num) {
+                self.cues_mut().insert(end_num.clone(), cue);
+            } else {
+                log::warn!("Could not renumber cue because getting the cue failed");
+            }
+        } else {
+            log::warn!("Could not renumber cue because new number already exists");
+        }
+    }
 }
 
-pub type UndoAction = dyn FnOnce(&mut State);
+pub type CuesEditAction = dyn FnOnce(&mut State);
+pub type CuesEditActionPrime = dyn Fn(&mut CuesData);
+
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct CuesData {
+    cues: BTreeMap<CueNumber, Cue>,
+    ch_names: ChannelNames,
+}
+impl CuesData {
+    pub fn cues(&self) -> &BTreeMap<CueNumber, Cue> {
+        &self.cues
+    }
+    pub fn cues_mut(&mut self) -> &mut BTreeMap<CueNumber, Cue> {
+        &mut self.cues
+    }
+    pub fn ch_names(&self) -> &ChannelNames {
+        &self.ch_names
+    }
+    pub fn ch_names_mut(&mut self) -> &mut ChannelNames {
+        &mut self.ch_names
+    }
+}
 
 #[derive(
     Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,

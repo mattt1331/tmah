@@ -15,28 +15,6 @@ pub enum UiScreen {
     Board,
 }
 
-/// Whether and what editing action is the ui doing in the cues screen. For instance, the edit DCA
-/// assignment popup or changing a cue description.
-#[derive(Default)]
-pub enum CuesUiMode {
-    #[default]
-    None,
-    EditChannelNames,
-    EditDcaAssign {
-        cue_ind: usize,
-        dca_ind: usize,
-        original_dca_name: Option<String>,
-        original_assignment: BTreeSet<Channel>,
-    },
-    EditCueDesc {
-        cue_ind: usize,
-    },
-    RenumberCue {
-        cue_ind: usize,
-        input_text: String,
-    },
-}
-
 impl eframe::App for State {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -111,6 +89,28 @@ impl eframe::App for State {
             storage.flush();
         }
     }
+}
+
+/// Whether and what editing action is the ui doing in the cues screen. For instance, the edit DCA
+/// assignment popup or changing a cue description.
+#[derive(Default)]
+pub enum CuesUiMode {
+    #[default]
+    None,
+    EditChannelNames,
+    EditDcaAssign {
+        cue_ind: usize,
+        dca_ind: usize,
+        original_dca_name: Option<String>,
+        original_assignment: BTreeSet<Channel>,
+    },
+    EditCueDesc {
+        cue_ind: usize,
+    },
+    RenumberCue {
+        cue_ind: usize,
+        input_text: String,
+    },
 }
 
 /// UI: cues
@@ -266,8 +266,7 @@ impl State {
                             .with_main_wrap(true)
                             .with_cross_justify(true);
                         ui.with_layout(layout, |ui| {
-                            if let CuesUiMode::EditCueDesc { cue_ind } =
-                                *self.cues_ui_mode()
+                            if let CuesUiMode::EditCueDesc { cue_ind } = *self.cues_ui_mode()
                                 && cue_ind == i
                             {
                                 if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
@@ -298,7 +297,7 @@ impl State {
                     if let Some(cue) = &self.cues().values().nth(i) {
                         for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
                             let (_, response) = row.col(|ui| {
-                                let dca_name = dca.name(self.cues_channel_names());
+                                let dca_name = dca.name(self.cues_ch_names());
                                 if !dca_name.is_empty() {
                                     let layout = egui::Layout::top_down(egui::Align::Center)
                                         .with_main_justify(true)
@@ -387,7 +386,7 @@ impl State {
                                             return;
                                         };
                                         ui.text_edit_singleline(
-                                            self.cues_channel_names_mut()
+                                            self.cues_ch_names_mut()
                                                 .edit_name(&Channel::from_index(i)),
                                         );
                                     });
@@ -432,7 +431,7 @@ impl State {
             egui::Window::new("Edit DCA Assignments")
                 .title_bar(false)
                 .show(ui.ctx(), |ui| {
-                    let dca_name = copied_cue.dcas()[*dca_ind].name(self.cues_channel_names());
+                    let dca_name = copied_cue.dcas()[*dca_ind].name(self.cues_ch_names());
                     let dca_name = if !dca_name.is_empty() {
                         dca_name
                     } else {
@@ -468,7 +467,7 @@ impl State {
                     let assigned_pre = assigned.clone();
                     for i in 0..num_channels {
                         let ch_name = self
-                            .cues_channel_names()
+                            .cues_ch_names()
                             .get_name(&Channel::from_index(i))
                             .unwrap_or_else(|| format!("Channel {}", i + 1));
                         let ch_name = if !ch_name.is_empty() {

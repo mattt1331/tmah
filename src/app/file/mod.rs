@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 mod local_file;
 
 /// Data saved in the show file
+// FIXME: instead use super::CuesData
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct FileData {
     cues: BTreeMap<CueNumber, Cue>,
@@ -35,14 +36,14 @@ impl State {
         // Remember to update the load function as well
         // Do that first pls
         FileData {
-            cues: self.cues.clone(),
-            channel_names: self.cues_ch_names.clone(),
+            cues: self.cues().clone(),
+            channel_names: self.cues_ch_names().clone(),
         }
     }
     /// Loads the given data (ie sets state equal to provided values)
     pub fn file_load_data(&mut self, data: FileData) {
-        self.cues = data.cues;
-        self.cues_ch_names = data.channel_names;
+        *self.cues_mut() = data.cues;
+        *self.cues_ch_names_mut() = data.channel_names;
     }
 }
 

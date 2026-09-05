@@ -1,13 +1,13 @@
 //! Contains the program state and UI
 
-mod cues;
 mod board;
+mod cues;
 mod file;
 mod ui;
 
 use board::Channel;
 pub use board::Decibels;
-pub use cues::{Cue, CueNumber, ChannelNames, UndoAction};
+pub use cues::{ChannelNames, Cue, CueNumber, CuesData, CuesEditAction, CuesEditActionPrime};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,10 +15,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct State {
     ui_screen: ui::UiScreen,
 
-
     // Cues
-    cues: BTreeMap<CueNumber, Cue>,
-    cues_ch_names: ChannelNames,
+    cues_data: CuesData,
     /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
     cues_ui_mode: ui::CuesUiMode,
     cues_selected_cue_ind: Option<usize>,
@@ -26,8 +24,9 @@ pub struct State {
     /// An objectively terrible implementation, true, but it's funny. A stack of undo actions. When
     /// undo is pressed, pop off the last one and run it on `State`. When an undoable action
     /// occurs, add the undo action to the stack.
-    cues_undo_stack: Vec<Box<UndoAction>>,
-
+    cues_undo_stack: Vec<Box<CuesEditAction>>,
+    cues_action_stack: Vec<(Box<CuesEditActionPrime>, Box<CuesEditActionPrime>)>,
+    cues_action_stack_backtracks: usize,
 
     // Board
     board_connection: Box<dyn board::Connectable>,
@@ -36,7 +35,6 @@ pub struct State {
     /// The currently active connection to difference with above
     board_connection_ui_prev: board::Connections,
 
-
     // File
     file_state: file::FileState,
 }
@@ -44,8 +42,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         State {
-            cues: BTreeMap::new(),
-            cues_ch_names: ChannelNames::default(),
+            cues_data: CuesData::default(),
             board_connection: Box::new(board::NoConnection::new()),
 
             file_state: file::FileState::default(),
@@ -54,6 +51,8 @@ impl Default for State {
             cues_ui_mode: ui::CuesUiMode::default(),
             cues_selected_cue_ind: None,
             cues_undo_stack: Vec::default(),
+            cues_action_stack: Vec::default(),
+            cues_action_stack_backtracks: usize::default(),
             board_connection_ui: board::Connections::default(),
             board_connection_ui_prev: board::Connections::default(),
         }
@@ -69,16 +68,16 @@ impl State {
         self.board_connection.num_channels()
     }
     pub fn cues(&self) -> &BTreeMap<CueNumber, Cue> {
-        &self.cues
+        self.cues_data.cues()
     }
     pub fn cues_mut(&mut self) -> &mut BTreeMap<CueNumber, Cue> {
-        &mut self.cues
+        self.cues_data.cues_mut()
     }
-    pub fn cues_channel_names(&self) -> &ChannelNames {
-        &self.cues_ch_names
+    pub fn cues_ch_names(&self) -> &ChannelNames {
+        self.cues_data.ch_names()
     }
-    pub fn cues_channel_names_mut(&mut self) -> &mut ChannelNames {
-        &mut self.cues_ch_names
+    pub fn cues_ch_names_mut(&mut self) -> &mut ChannelNames {
+        self.cues_data.ch_names_mut()
     }
     pub fn cues_ui_mode(&self) -> &ui::CuesUiMode {
         &self.cues_ui_mode
@@ -142,7 +141,8 @@ impl State {
     }
     /// Sends the channel names to the board.
     pub fn fire_channel_names(&mut self) {
-        self.board_connection.fire_channel_names(&self.cues_ch_names);
+        // FIX: why are we cloning here
+        let ch_names = self.cues_ch_names().clone();
+        self.board_connection.fire_channel_names(&ch_names);
     }
 }
-
