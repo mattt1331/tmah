@@ -15,7 +15,7 @@ impl super::State {
         }
         self.cues.insert(number.clone(), cue);
         if !no_undo && let Some(cue_ind) = self.cues.keys().position(|c| *c == number) {
-            self.cues_do_edit_action(ui::CuesEditAction::EditCueDesc { cue_ind });
+            self.cues_do_edit_action(ui::CuesUiMode::EditCueDesc { cue_ind });
             self.cues_stack_undo_action(Box::new(move |state| {
                 state.cues_delete_cue(&number, true);
             }));
@@ -73,21 +73,21 @@ impl super::State {
     }
     /// Commences the given edit action. If another edit action is already active, ends that
     /// action.
-    pub fn cues_do_edit_action(&mut self, action: ui::CuesEditAction) {
-        if !matches!(self.cues_edit_action, ui::CuesEditAction::None) {
+    pub fn cues_do_edit_action(&mut self, action: ui::CuesUiMode) {
+        if !matches!(self.cues_ui_mode, ui::CuesUiMode::None) {
             self.cues_end_edit_action();
         }
-        self.cues_edit_action = action;
+        self.cues_ui_mode = action;
     }
     /// Ends any active cues edit action. For actions which edit state continuously (eg dca assign
     /// popup), stacks an undo action.
     pub fn cues_end_edit_action(&mut self) {
-        match self.cues_edit_action {
-            ui::CuesEditAction::None => return,
-            ui::CuesEditAction::EditChannelNames => {
+        match self.cues_ui_mode {
+            ui::CuesUiMode::None => return,
+            ui::CuesUiMode::EditChannelNames => {
                 log::warn!("Please implement undo for edit channel names")
             }
-            ui::CuesEditAction::EditDcaAssign {
+            ui::CuesUiMode::EditDcaAssign {
                 cue_ind,
                 dca_ind,
                 ref original_dca_name,
@@ -106,17 +106,17 @@ impl super::State {
                     }
                 }));
             }
-            ui::CuesEditAction::EditCueDesc { cue_ind: _ } => {
+            ui::CuesUiMode::EditCueDesc { cue_ind: _ } => {
                 log::warn!("Please implement undo for editing cue desc")
             }
-            ui::CuesEditAction::RenumberCue {
+            ui::CuesUiMode::RenumberCue {
                 cue_ind: _,
                 input_text: _,
             } => {
                 // Renumbering cues is a one-shot and undo is implemented elsewhere
             }
         }
-        self.cues_edit_action = ui::CuesEditAction::None;
+        self.cues_ui_mode = ui::CuesUiMode::None;
     }
     /// Sets the selected cue to the given index, validating the index. If `None` is given instead,
     /// deselect any selected cue.

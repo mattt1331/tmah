@@ -20,7 +20,7 @@ pub struct State {
     cues: BTreeMap<CueNumber, Cue>,
     cues_ch_names: ChannelNames,
     /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
-    cues_edit_action: ui::CuesEditAction,
+    cues_ui_mode: ui::CuesUiMode,
     cues_selected_cue_ind: Option<usize>,
     // FIXME: Refactor this atrocity.
     /// An objectively terrible implementation, true, but it's funny. A stack of undo actions. When
@@ -51,7 +51,7 @@ impl Default for State {
             file_state: file::FileState::default(),
 
             ui_screen: ui::UiScreen::default(),
-            cues_edit_action: ui::CuesEditAction::default(),
+            cues_ui_mode: ui::CuesUiMode::default(),
             cues_selected_cue_ind: None,
             cues_undo_stack: Vec::default(),
             board_connection_ui: board::Connections::default(),
@@ -80,11 +80,11 @@ impl State {
     pub fn cues_channel_names_mut(&mut self) -> &mut ChannelNames {
         &mut self.cues_ch_names
     }
-    pub fn cues_edit_action(&self) -> &ui::CuesEditAction {
-        &self.cues_edit_action
+    pub fn cues_ui_mode(&self) -> &ui::CuesUiMode {
+        &self.cues_ui_mode
     }
-    pub fn cues_edit_action_mut(&mut self) -> &mut ui::CuesEditAction {
-        &mut self.cues_edit_action
+    pub fn cues_ui_mode_mut(&mut self) -> &mut ui::CuesUiMode {
+        &mut self.cues_ui_mode
     }
     pub fn cues_selected_cue(&self) -> Option<usize> {
         self.cues_selected_cue_ind

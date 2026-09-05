@@ -18,7 +18,7 @@ pub enum UiScreen {
 /// Whether and what editing action is the ui doing in the cues screen. For instance, the edit DCA
 /// assignment popup or changing a cue description.
 #[derive(Default)]
-pub enum CuesEditAction {
+pub enum CuesUiMode {
     #[default]
     None,
     EditChannelNames,
@@ -130,7 +130,7 @@ impl State {
                 self.cues_do_undo();
             }
             if ui.button("Channel names").clicked() {
-                self.cues_do_edit_action(CuesEditAction::EditChannelNames);
+                self.cues_do_edit_action(CuesUiMode::EditChannelNames);
             }
         });
         ui.add_space(10.0);
@@ -141,7 +141,7 @@ impl State {
         // If a DCA was double clicked, edit its assignment
         if let Some((i, j)) = double_clicked_cell {
             let dca = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]);
-            self.cues_do_edit_action(CuesEditAction::EditDcaAssign {
+            self.cues_do_edit_action(CuesUiMode::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
                 original_dca_name: dca.and_then(|dca| dca.assigned_name().clone()),
@@ -160,7 +160,7 @@ impl State {
 
         // Space to GO
         if ui.ctx().input(|input| input.key_pressed(egui::Key::Space))
-            && matches!(self.cues_edit_action(), CuesEditAction::None)
+            && matches!(self.cues_ui_mode(), CuesUiMode::None)
         {
             self.fire_next_cue();
         }
@@ -213,10 +213,10 @@ impl State {
 
                     // Cue
                     let cue_response = row.col(|ui| {
-                        if let CuesEditAction::RenumberCue {
+                        if let CuesUiMode::RenumberCue {
                             cue_ind,
                             input_text,
-                        } = self.cues_edit_action_mut()
+                        } = self.cues_ui_mode_mut()
                             && *cue_ind == i
                         {
                             let response = ui.text_edit_singleline(input_text);
@@ -255,7 +255,7 @@ impl State {
                             .nth(i)
                             .map(|n| n.to_string())
                             .unwrap_or("?".to_string());
-                        self.cues_do_edit_action(CuesEditAction::RenumberCue {
+                        self.cues_do_edit_action(CuesUiMode::RenumberCue {
                             cue_ind: i,
                             input_text: cue_num,
                         })
@@ -266,8 +266,8 @@ impl State {
                             .with_main_wrap(true)
                             .with_cross_justify(true);
                         ui.with_layout(layout, |ui| {
-                            if let CuesEditAction::EditCueDesc { cue_ind } =
-                                *self.cues_edit_action()
+                            if let CuesUiMode::EditCueDesc { cue_ind } =
+                                *self.cues_ui_mode()
                                 && cue_ind == i
                             {
                                 if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
@@ -292,7 +292,7 @@ impl State {
                         });
                     });
                     if desc_response.1.double_clicked() {
-                        self.cues_do_edit_action(CuesEditAction::EditCueDesc { cue_ind: i })
+                        self.cues_do_edit_action(CuesUiMode::EditCueDesc { cue_ind: i })
                     }
                     // DCAs
                     if let Some(cue) = &self.cues().values().nth(i) {
@@ -345,9 +345,9 @@ impl State {
         {
             self.cues_end_edit_action();
         }
-        match *self.cues_edit_action() {
-            CuesEditAction::None => (),
-            CuesEditAction::EditChannelNames => {
+        match *self.cues_ui_mode() {
+            CuesUiMode::None => (),
+            CuesUiMode::EditChannelNames => {
                 egui::Window::new("Edit Channel Names")
                     .title_bar(false)
                     .show(ui.ctx(), |ui| {
@@ -395,20 +395,20 @@ impl State {
                             })
                     });
             }
-            CuesEditAction::EditDcaAssign { .. } => self.cues_ui_popup_dca_assign(ui),
-            CuesEditAction::EditCueDesc { .. } | CuesEditAction::RenumberCue { .. } => (), // Not a popup
+            CuesUiMode::EditDcaAssign { .. } => self.cues_ui_popup_dca_assign(ui),
+            CuesUiMode::EditCueDesc { .. } | CuesUiMode::RenumberCue { .. } => (), // Not a popup
         }
     }
     /// Draw the _edit DCA assignment_ popup in the cues screen
     fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui) {
         // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
         // of the function, we assign `copied_cue` back to the actual cue.
-        let (mut copied_cue, cue_ind, _dca_ind) = if let CuesEditAction::EditDcaAssign {
+        let (mut copied_cue, cue_ind, _dca_ind) = if let CuesUiMode::EditDcaAssign {
             cue_ind,
             dca_ind,
             original_dca_name: _,
             original_assignment: _,
-        } = self.cues_edit_action()
+        } = self.cues_ui_mode()
         {
             let cue = self.cues().values().nth(*cue_ind).cloned();
             if let Some(cue) = cue {
@@ -422,12 +422,12 @@ impl State {
             return;
         };
 
-        if let CuesEditAction::EditDcaAssign {
+        if let CuesUiMode::EditDcaAssign {
             cue_ind,
             dca_ind,
             original_dca_name: _,
             original_assignment: _,
-        } = self.cues_edit_action()
+        } = self.cues_ui_mode()
         {
             egui::Window::new("Edit DCA Assignments")
                 .title_bar(false)
