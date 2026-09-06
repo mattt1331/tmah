@@ -67,6 +67,12 @@ impl State {
     pub fn num_channels(&self) -> u8 {
         self.board_connection.num_channels()
     }
+    pub fn cues_data(&self) -> &CuesData {
+        &self.cues_data
+    }
+    pub fn cues_data_mut(&mut self) -> &mut CuesData {
+        &mut self.cues_data
+    }
     pub fn cues(&self) -> &BTreeMap<CueNumber, Cue> {
         self.cues_data.cues()
     }

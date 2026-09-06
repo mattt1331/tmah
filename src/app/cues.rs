@@ -5,62 +5,6 @@ use super::*;
 
 /// Cues UI functions
 impl super::State {
-    /// Adds the given cue at the given number.
-    /// UNDO: If `no_undo` is false, stacks an undo action.
-    pub fn cues_add_cue(&mut self, cue: Cue, number: CueNumber, no_undo: bool) {
-        // Check that there isn't already a cue at this number
-        if self.cues().contains_key(&number) {
-            log::warn!("Did not insert cue because this number is already occupied");
-            return;
-        }
-        self.cues_mut().insert(number.clone(), cue);
-        if !no_undo && let Some(cue_ind) = self.cues_mut().keys().position(|c| *c == number) {
-            self.cues_do_edit_action(ui::CuesUiMode::EditCueDesc { cue_ind });
-            self.cues_stack_undo_action(Box::new(move |state| {
-                state.cues_delete_cue(&number, true);
-            }));
-        }
-    }
-    /// Deletes the cue at the specified number.
-    /// UNDO: If `no_undo` is false, stacks an undo action.
-    pub fn cues_delete_cue(&mut self, number: &CueNumber, no_undo: bool) {
-        let removed_cue = self.cues_mut().remove(number);
-        if !no_undo && let Some(removed_cue) = removed_cue {
-            let number = number.clone();
-            self.cues_stack_undo_action(Box::new(move |state| {
-                state.cues_add_cue(removed_cue, number, true);
-            }));
-        }
-        // Update index
-        if let Some(sel_ind) = self.cues_selected_cue_ind {
-            if sel_ind > 0 {
-                self.cues_set_selected(Some(sel_ind - 1));
-            } else {
-                self.cues_set_selected(None);
-            }
-        }
-    }
-    /// Move the cue at `start_index` to `end_number`.
-    /// UNDO: If `no_undo` is false, stacks an undo action.
-    pub fn cues_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber, no_undo: bool) {
-        // Check that there isn't already a cue with `end_number`
-        if !self.cues().contains_key(&end_num) {
-            // Get the cue we are renumbering
-            if let Some(cue) = self.cues_mut().remove(&start_num) {
-                self.cues_mut().insert(end_num.clone(), cue);
-
-                if !no_undo {
-                    self.cues_stack_undo_action(Box::new(move |state| {
-                        state.cues_renumber_cue(end_num, start_num, true);
-                    }));
-                }
-            } else {
-                log::warn!("Could not renumber cue because getting the cue failed");
-            }
-        } else {
-            log::warn!("Could not renumber cue because new number already exists");
-        }
-    }
     /// Adds the given undo action to the top of the undo stack.
     pub fn cues_stack_undo_action(&mut self, action: Box<CuesEditAction>) {
         self.cues_undo_stack.push(action);
@@ -119,9 +63,77 @@ impl super::State {
         self.cues_ui_mode = ui::CuesUiMode::None;
     }
 }
-/// Functions used by the cues ui. Functions with the `exec` prefix do the thing, whereas their
-/// counterparts without will also stack undos.
+/// Functions used by the cues ui.
 impl super::State {
+    /// Adds the given cue at the given number.
+    pub fn cues_add_cue(&mut self, cue: Cue, number: CueNumber) {
+        // Check that there isn't already a cue at this number
+        if self.cues().contains_key(&number) {
+            log::warn!("Did not insert cue because this number is already occupied");
+            return;
+        }
+        self.cues_data.add_cue(cue.clone(), number.clone());
+        let num = number.clone();
+        let undo = move |data: &mut CuesData| {
+            let cue = cue.clone();
+            let number = num;
+            data.add_cue(cue.clone(), number.clone());
+        };
+        let redo = move |data: &mut CuesData| {
+            let number = number;
+            data.remove_cue(&number);
+        };
+        self.cues_stack_action(Box::new(undo), Box::new(redo));
+    }
+    /// Deletes the cue at the specified number.
+    pub fn cues_delete_cue(&mut self, number: &CueNumber) {
+        if let Some(removed_cue) = self.cues_data.remove_cue(number) {
+            let num = number.clone();
+            let undo = move |data: &mut CuesData| {
+                let cue = removed_cue.clone();
+                let number = num;
+                data.add_cue(cue.clone(), number.clone());
+            };
+            let num = number.clone();
+            let redo = move |data: &mut CuesData| {
+                let number = num;
+                data.remove_cue(&number);
+            };
+            self.cues_stack_action(Box::new(undo), Box::new(redo));
+            // Update index
+            if let Some(sel_ind) = self.cues_selected_cue_ind {
+                if sel_ind > 0 {
+                    self.cues_set_selected(Some(sel_ind - 1));
+                } else {
+                    self.cues_set_selected(None);
+                }
+            }
+        }
+    }
+    /// Move the cue at `start_index` to `end_number`.
+    pub fn cues_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber) {
+        // Check that there isn't already a cue with `end_number`
+        if !self.cues().contains_key(&end_num) {
+            self.cues_data.renumber_cue(start_num.clone(), end_num.clone());
+            let start = end_num.clone();
+            let end = start_num.clone();
+            let undo = move |data: &mut CuesData| {
+                let start_num = start;
+                let end_num = end;
+                data.renumber_cue(start_num, end_num);
+            };
+            let start = end_num.clone();
+            let end = start_num.clone();
+            let redo = move |data: &mut CuesData| {
+                let start_num = start;
+                let end_num = end;
+                data.renumber_cue(start_num, end_num);
+            };
+            self.cues_stack_action(Box::new(undo), Box::new(redo));
+        } else {
+            log::warn!("Could not renumber cue because new number already exists");
+        }
+    }
     /// Sets the selected cue to the given index, validating the index. If `None` is given instead,
     /// deselect any selected cue.
     pub fn cues_set_selected(&mut self, cue_ind: Option<usize>) {
@@ -137,13 +149,26 @@ impl super::State {
     pub fn cues_can_undo(&self) -> bool {
         self.cues_action_stack.len() - self.cues_action_stack_backtracks > 0
     }
-    /// Executes the undo action at the top of the stack and pops it off of the stack.
+    /// Executes the undo action to take us back a step and increment the backtrack counter.
     pub fn cues_undo(&mut self) {
         if self.cues_can_undo() {
-            self.cues_action_stack
+            (self.cues_action_stack
                 [self.cues_action_stack.len() - self.cues_action_stack_backtracks - 1]
-                .0(&mut self.cues_data);
+                .0.box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks += 1;
+        }
+    }
+    /// Checks whether we can redo right now.
+    pub fn cues_can_redo(&self) -> bool {
+        self.cues_action_stack_backtracks > 0
+    }
+    /// Executes the redo action to move us forwards a step and decrement the backtrack counter.
+    pub fn cues_redo(&mut self) {
+        if self.cues_can_redo() {
+            (self.cues_action_stack
+                [self.cues_action_stack.len() - self.cues_action_stack_backtracks - 1]
+                .1.box_clone())(&mut self.cues_data);
+            self.cues_action_stack_backtracks -= 1;
         }
     }
     /// Adds the given undo/redo action to the top of the stack, discarding any actions which could
@@ -159,48 +184,28 @@ impl super::State {
             .push((backwards_action, forwards_action));
         self.cues_action_stack_backtracks = 0;
     }
-    /// Adds the given cue at the given number.
-    pub fn cues_exec_add_cue(&mut self, cue: Cue, number: CueNumber) {
-        // Check that there isn't already a cue at this number
-        if self.cues().contains_key(&number) {
-            log::warn!("Did not insert cue because this number is already occupied");
-            return;
-        }
-        self.cues_mut().insert(number, cue);
-    }
-    /// Deletes the cue at the specified number and returns it.
-    pub fn cues_exec_delete_cue(&mut self, number: &CueNumber) -> Option<Cue> {
-        let removed_cue = self.cues_mut().remove(number);
-        // Update index
-        if removed_cue.is_some()
-            && let Some(sel_ind) = self.cues_selected_cue_ind
-        {
-            if sel_ind > 0 {
-                self.cues_set_selected(Some(sel_ind - 1));
-            } else {
-                self.cues_set_selected(None);
-            }
-        }
-        removed_cue
-    }
-    /// Move the cue at `start_index` to `end_number`.
-    pub fn cues_exec_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber) {
-        // Check that there isn't already a cue with `end_number`
-        if !self.cues().contains_key(&end_num) {
-            // Get the cue we are renumbering
-            if let Some(cue) = self.cues_mut().remove(&start_num) {
-                self.cues_mut().insert(end_num.clone(), cue);
-            } else {
-                log::warn!("Could not renumber cue because getting the cue failed");
-            }
-        } else {
-            log::warn!("Could not renumber cue because new number already exists");
-        }
-    }
 }
 
 pub type CuesEditAction = dyn FnOnce(&mut State);
-pub type CuesEditActionPrime = dyn Fn(&mut CuesData);
+/// Some action which edits a `CuesData`
+pub type CuesEditActionPrime = dyn CloneableClosure;
+/// This trait denotes and is automatically implemented for closures which can be cloned and which
+/// we can move values into.
+/// Because you could undo, redo, undo, redo the same action multiple times, we use these closures
+/// to store edit actions so that we can clone them to apply them multiple times. Is this a good
+/// idea? Probably not, but neither is storing closures instead of doing this a normal way and I'm
+/// too lazy to implement this correctly.
+pub trait CloneableClosure: for<'a> FnOnce(&'a mut CuesData) -> () {
+    fn box_clone(&self) -> Box<dyn CloneableClosure>;
+}
+impl<F> CloneableClosure for F 
+where
+    F: for<'a> FnOnce(&'a mut CuesData) + Clone + 'static
+{
+    fn box_clone(&self) -> Box<dyn CloneableClosure> {
+        Box::new(self.clone())
+    }
+}
 
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct CuesData {
@@ -219,6 +224,34 @@ impl CuesData {
     }
     pub fn ch_names_mut(&mut self) -> &mut ChannelNames {
         &mut self.ch_names
+    }
+    /// Adds the given cue at the given number.
+    pub fn add_cue(&mut self, cue: Cue, number: CueNumber) {
+        // Check that there isn't already a cue at this number
+        if self.cues().contains_key(&number) {
+            log::warn!("Did not insert cue because this number is already occupied");
+            return;
+        }
+        self.cues_mut().insert(number, cue);
+    }
+    /// Deletes the cue at the specified number and returns it.
+    pub fn remove_cue(&mut self, number: &CueNumber) -> Option<Cue> {
+        let removed_cue = self.cues_mut().remove(number);
+        removed_cue
+    }
+    /// Move the cue at `start_index` to `end_number`.
+    pub fn renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber) {
+        // Check that there isn't already a cue with `end_number`
+        if !self.cues().contains_key(&end_num) {
+            // Get the cue we are renumbering
+            if let Some(cue) = self.cues_mut().remove(&start_num) {
+                self.cues_mut().insert(end_num.clone(), cue);
+            } else {
+                log::warn!("Could not renumber cue because getting the cue failed");
+            }
+        } else {
+            log::warn!("Could not renumber cue because new number already exists");
+        }
     }
 }
 

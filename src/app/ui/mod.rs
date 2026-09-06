@@ -124,7 +124,7 @@ impl State {
             if ui.button("Add cue at bot.").clicked() {
                 let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
                 new_bottom_num.increment_lowest();
-                self.cues_add_cue(super::Cue::default(), new_bottom_num, false);
+                self.cues_add_cue(super::Cue::default(), new_bottom_num);
             }
             if ui.button("Undo").clicked() {
                 self.cues_do_undo();
@@ -155,7 +155,7 @@ impl State {
             && let Some(cue_num) = self.cues().keys().nth(index)
         {
             let cue_num = cue_num.clone();
-            self.cues_delete_cue(&cue_num, false);
+            self.cues_delete_cue(&cue_num);
         }
 
         // Space to GO
@@ -230,7 +230,6 @@ impl State {
                                     self.cues_renumber_cue(
                                         (*current_cue_num).clone(),
                                         new_cue_num,
-                                        false,
                                     );
                                 }
                                 self.cues_end_edit_action();
