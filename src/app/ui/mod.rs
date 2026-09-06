@@ -112,6 +112,15 @@ pub enum CuesUiMode {
     },
 }
 
+/// Whether we are in edit mode or show mode. During show mode, edits cannot be made and
+/// accidentally firing a cue is more difficult.
+#[derive(Default)]
+pub enum CuesUiSafety {
+    #[default]
+    Edit,
+    Show,
+}
+
 /// UI: cues
 impl State {
     // TODO: Extract stuff into separate functions
@@ -120,20 +129,33 @@ impl State {
         self.cues_ui_popup(ui);
 
         ui.horizontal(|ui| {
-            if ui.button("Add cue at bot.").clicked() {
-                let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
-                new_bottom_num.increment_lowest();
-                self.cues_add_cue(super::Cue::default(), new_bottom_num);
-            }
-            if ui.button("Undo").clicked() {
-                self.cues_do_undo();
-            }
-            if ui.button("Redo").clicked() {
-                self.cues_do_redo();
-            }
-            if ui.button("Channel names").clicked() {
-                self.cues_begin_edit_action(CuesUiMode::EditChannelNames);
-            }
+            // Left aligned part
+            ui.horizontal(|ui| {
+                if ui.button("Add cue at bot.").clicked() {
+                    let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
+                    new_bottom_num.increment_lowest();
+                    self.cues_add_cue(super::Cue::default(), new_bottom_num);
+                }
+                if ui.button("Undo").clicked() {
+                    self.cues_do_undo();
+                }
+                if ui.button("Redo").clicked() {
+                    self.cues_do_redo();
+                }
+                if ui.button("Channel names").clicked() {
+                    self.cues_begin_edit_action(CuesUiMode::EditChannelNames);
+                }
+            });
+            // Right aligned part
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                if ui.add(egui::Button::selectable(self.cues_is_show(), "Show")).clicked() {
+                    *self.cues_ui_safety_mut() = CuesUiSafety::Show;
+                }
+                // This one is first because right to left
+                if ui.add(egui::Button::selectable(self.cues_is_editing(), "Edit")).clicked() {
+                    *self.cues_ui_safety_mut() = CuesUiSafety::Edit;
+                }
+            });
         });
         ui.add_space(10.0);
 

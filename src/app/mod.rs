@@ -19,6 +19,7 @@ pub struct State {
     cues_data: CuesData,
     /// What kind of edit are we in-progress of? eg DCA assignments, cue names, etc
     cues_ui_mode: ui::CuesUiMode,
+    cues_ui_safety: ui::CuesUiSafety,
     cues_selected_cue_ind: Option<usize>,
     // FIXME: Refactor this atrocity.
     /// An objectively terrible implementation, true, but it's funny. A stack of undo actions. When
@@ -49,6 +50,7 @@ impl Default for State {
 
             ui_screen: ui::UiScreen::default(),
             cues_ui_mode: ui::CuesUiMode::default(),
+            cues_ui_safety: ui::CuesUiSafety::default(),
             cues_selected_cue_ind: None,
             cues_undo_stack: Vec::default(),
             cues_action_stack: Vec::default(),
@@ -90,6 +92,15 @@ impl State {
     }
     pub fn cues_ui_mode_mut(&mut self) -> &mut ui::CuesUiMode {
         &mut self.cues_ui_mode
+    }
+    pub fn cues_is_editing(&self) -> bool {
+        matches!(self.cues_ui_safety, ui::CuesUiSafety::Edit)
+    }
+    pub fn cues_is_show(&self) -> bool {
+        matches!(self.cues_ui_safety, ui::CuesUiSafety::Show)
+    }
+    pub fn cues_ui_safety_mut(&mut self) -> &mut ui::CuesUiSafety {
+        &mut self.cues_ui_safety
     }
     pub fn cues_selected_cue(&self) -> Option<usize> {
         self.cues_selected_cue_ind
