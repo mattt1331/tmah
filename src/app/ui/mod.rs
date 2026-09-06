@@ -101,8 +101,7 @@ pub enum CuesUiMode {
     EditDcaAssign {
         cue_ind: usize,
         dca_ind: usize,
-        original_dca_name: Option<String>,
-        original_assignment: BTreeSet<Channel>,
+        original_dca_state: super::cues::DcaState,
     },
     EditCueDesc {
         cue_ind: usize,
@@ -129,8 +128,11 @@ impl State {
             if ui.button("Undo").clicked() {
                 self.cues_do_undo();
             }
+            if ui.button("Redo").clicked() {
+                self.cues_do_redo();
+            }
             if ui.button("Channel names").clicked() {
-                self.cues_do_edit_action(CuesUiMode::EditChannelNames);
+                self.cues_begin_edit_action(CuesUiMode::EditChannelNames);
             }
         });
         ui.add_space(10.0);
@@ -139,13 +141,12 @@ impl State {
         let double_clicked_cell = self.cues_table(ui);
 
         // If a DCA was double clicked, edit its assignment
-        if let Some((i, j)) = double_clicked_cell {
-            let dca = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]);
-            self.cues_do_edit_action(CuesUiMode::EditDcaAssign {
+        if let Some((i, j)) = double_clicked_cell
+            && let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]) {
+            self.cues_begin_edit_action(CuesUiMode::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
-                original_dca_name: dca.and_then(|dca| dca.assigned_name().clone()),
-                original_assignment: dca.map(|dca| dca.assigned().clone()).unwrap_or_default(),
+                original_dca_state: dca.clone(),
             });
         }
 
@@ -227,10 +228,7 @@ impl State {
                                 if let Ok(new_cue_num) = input
                                     && let Some(current_cue_num) = self.cues().keys().nth(cue_ind)
                                 {
-                                    self.cues_renumber_cue(
-                                        (*current_cue_num).clone(),
-                                        new_cue_num,
-                                    );
+                                    self.cues_renumber_cue((*current_cue_num).clone(), new_cue_num);
                                 }
                                 self.cues_end_edit_action();
                             }
@@ -254,7 +252,7 @@ impl State {
                             .nth(i)
                             .map(|n| n.to_string())
                             .unwrap_or("?".to_string());
-                        self.cues_do_edit_action(CuesUiMode::RenumberCue {
+                        self.cues_begin_edit_action(CuesUiMode::RenumberCue {
                             cue_ind: i,
                             input_text: cue_num,
                         })
@@ -290,7 +288,7 @@ impl State {
                         });
                     });
                     if desc_response.1.double_clicked() {
-                        self.cues_do_edit_action(CuesUiMode::EditCueDesc { cue_ind: i })
+                        self.cues_begin_edit_action(CuesUiMode::EditCueDesc { cue_ind: i })
                     }
                     // DCAs
                     if let Some(cue) = &self.cues().values().nth(i) {
@@ -404,8 +402,7 @@ impl State {
         let (mut copied_cue, cue_ind, _dca_ind) = if let CuesUiMode::EditDcaAssign {
             cue_ind,
             dca_ind,
-            original_dca_name: _,
-            original_assignment: _,
+            ..
         } = self.cues_ui_mode()
         {
             let cue = self.cues().values().nth(*cue_ind).cloned();
@@ -423,8 +420,7 @@ impl State {
         if let CuesUiMode::EditDcaAssign {
             cue_ind,
             dca_ind,
-            original_dca_name: _,
-            original_assignment: _,
+            ..
         } = self.cues_ui_mode()
         {
             egui::Window::new("Edit DCA Assignments")

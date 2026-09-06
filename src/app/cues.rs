@@ -3,28 +3,19 @@
 
 use super::*;
 
-/// Cues UI functions
+/// Functions used by the cues ui.
 impl super::State {
-    /// Adds the given undo action to the top of the undo stack.
-    pub fn cues_stack_undo_action(&mut self, action: Box<CuesEditAction>) {
-        self.cues_undo_stack.push(action);
-    }
-    /// Executes the undo action at the top of the stack and pops it off of the stack.
-    pub fn cues_do_undo(&mut self) {
-        if let Some(action) = self.cues_undo_stack.pop() {
-            action(self);
-        }
-    }
     /// Commences the given edit action. If another edit action is already active, ends that
     /// action.
-    pub fn cues_do_edit_action(&mut self, action: ui::CuesUiMode) {
+    pub fn cues_begin_edit_action(&mut self, action: ui::CuesUiMode) {
         if !matches!(self.cues_ui_mode, ui::CuesUiMode::None) {
             self.cues_end_edit_action();
         }
         self.cues_ui_mode = action;
     }
-    /// Ends any active cues edit action. For actions which edit state continuously (eg dca assign
-    /// popup), stacks an undo action.
+    /// Ends any active cues edit action. This function exists so that any edit that needs to stack
+    /// an undo can do so if it is interrupted by another edit begining. Edits which modify state
+    /// continuously (as in, not the ones where you hit enter and you're done) use this mechanism.
     pub fn cues_end_edit_action(&mut self) {
         match self.cues_ui_mode {
             ui::CuesUiMode::None => return,
@@ -34,37 +25,39 @@ impl super::State {
             ui::CuesUiMode::EditDcaAssign {
                 cue_ind,
                 dca_ind,
-                ref original_dca_name,
-                ref original_assignment,
+                ref original_dca_state,
             } => {
-                let original_dca_name = original_dca_name.clone();
-                let original_assignment = original_assignment.clone();
-                self.cues_stack_undo_action(Box::new(move |state| {
-                    let dca = state.cues_mut().values_mut().nth(cue_ind)
-                        .map(|cue| &mut cue.dcas[dca_ind]);
-                    if let Some(dca) = dca {
-                        dca.name = original_dca_name;
-                        dca.set_assigned(original_assignment)
-                    } else {
-                        log::warn!("Could not find DCA at index {dca_ind} in cue at index {cue_ind} for undoing dca assign popup edits");
-                    }
-                }));
+                if let Some((_, cue)) = self.cues().iter().nth(cue_ind)
+                    && let Some(current_dca_state) = cue.dcas().iter().nth(dca_ind) {
+                        let original_dca_state = original_dca_state.clone();
+                        let current_dca_state = current_dca_state.clone();
+                        if original_dca_state != current_dca_state {
+                            let undo = move |data: &mut CuesData| {
+                                let cue_ind = cue_ind;
+                                let dca_ind = dca_ind;
+                                let original_dca_state = original_dca_state;
+                                data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| cue.dcas_mut().iter_mut().nth(dca_ind).map(|dca| *dca = original_dca_state));
+                            };
+                            let redo = move |data: &mut CuesData| {
+                                let cue_ind = cue_ind;
+                                let dca_ind = dca_ind;
+                                let new_dca_state = current_dca_state;
+                                data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| cue.dcas_mut().iter_mut().nth(dca_ind).map(|dca| *dca = new_dca_state));
+                            };
+                            self.cues_stack_action(Box::new(undo), Box::new(redo));
+                        }
+                } else {
+                    log::error!("Could not find DCA at index {dca_ind} or its cue at index {cue_ind} to setup undoing DCA edits");
+                }
             }
             ui::CuesUiMode::EditCueDesc { cue_ind: _ } => {
                 log::warn!("Please implement undo for editing cue desc")
             }
-            ui::CuesUiMode::RenumberCue {
-                cue_ind: _,
-                input_text: _,
-            } => {
-                // Renumbering cues is a one-shot and undo is implemented elsewhere
-            }
+            // Not a continuous edit
+            ui::CuesUiMode::RenumberCue { .. } => (),
         }
         self.cues_ui_mode = ui::CuesUiMode::None;
     }
-}
-/// Functions used by the cues ui.
-impl super::State {
     /// Adds the given cue at the given number.
     pub fn cues_add_cue(&mut self, cue: Cue, number: CueNumber) {
         // Check that there isn't already a cue at this number
@@ -114,7 +107,8 @@ impl super::State {
     pub fn cues_renumber_cue(&mut self, start_num: CueNumber, end_num: CueNumber) {
         // Check that there isn't already a cue with `end_number`
         if !self.cues().contains_key(&end_num) {
-            self.cues_data.renumber_cue(start_num.clone(), end_num.clone());
+            self.cues_data
+                .renumber_cue(start_num.clone(), end_num.clone());
             let start = end_num.clone();
             let end = start_num.clone();
             let undo = move |data: &mut CuesData| {
@@ -122,8 +116,8 @@ impl super::State {
                 let end_num = end;
                 data.renumber_cue(start_num, end_num);
             };
-            let start = end_num.clone();
-            let end = start_num.clone();
+            let start = start_num.clone();
+            let end = end_num.clone();
             let redo = move |data: &mut CuesData| {
                 let start_num = start;
                 let end_num = end;
@@ -150,11 +144,12 @@ impl super::State {
         self.cues_action_stack.len() - self.cues_action_stack_backtracks > 0
     }
     /// Executes the undo action to take us back a step and increment the backtrack counter.
-    pub fn cues_undo(&mut self) {
+    pub fn cues_do_undo(&mut self) {
         if self.cues_can_undo() {
             (self.cues_action_stack
                 [self.cues_action_stack.len() - self.cues_action_stack_backtracks - 1]
-                .0.box_clone())(&mut self.cues_data);
+                .0
+                .box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks += 1;
         }
     }
@@ -163,11 +158,12 @@ impl super::State {
         self.cues_action_stack_backtracks > 0
     }
     /// Executes the redo action to move us forwards a step and decrement the backtrack counter.
-    pub fn cues_redo(&mut self) {
+    pub fn cues_do_redo(&mut self) {
         if self.cues_can_redo() {
             (self.cues_action_stack
-                [self.cues_action_stack.len() - self.cues_action_stack_backtracks - 1]
-                .1.box_clone())(&mut self.cues_data);
+                [self.cues_action_stack.len() - self.cues_action_stack_backtracks]
+                .1
+                .box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks -= 1;
         }
     }
@@ -198,9 +194,9 @@ pub type CuesEditActionPrime = dyn CloneableClosure;
 pub trait CloneableClosure: for<'a> FnOnce(&'a mut CuesData) -> () {
     fn box_clone(&self) -> Box<dyn CloneableClosure>;
 }
-impl<F> CloneableClosure for F 
+impl<F> CloneableClosure for F
 where
-    F: for<'a> FnOnce(&'a mut CuesData) + Clone + 'static
+    F: for<'a> FnOnce(&'a mut CuesData) + Clone + 'static,
 {
     fn box_clone(&self) -> Box<dyn CloneableClosure> {
         Box::new(self.clone())
@@ -252,6 +248,15 @@ impl CuesData {
         } else {
             log::warn!("Could not renumber cue because new number already exists");
         }
+    }
+    /// Set the specified DCA to the given state.
+    pub fn set_dca_state(&mut self, cue_ind: usize, dca_ind: usize, dca_state: DcaState) {
+        self.cues.iter_mut().nth(cue_ind).map(|(_, cue)| {
+            cue.dcas_mut()
+                .iter_mut()
+                .nth(dca_ind)
+                .map(|dca| *dca = dca_state)
+        });
     }
 }
 
@@ -345,7 +350,7 @@ impl Cue {
 }
 
 /// The state of a DCA, which can be realized by calling a cue
-#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DcaState {
     assigned: BTreeSet<Channel>,
     name: Option<String>,
