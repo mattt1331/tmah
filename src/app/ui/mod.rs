@@ -123,36 +123,46 @@ pub enum CuesUiSafety {
 
 /// UI: cues
 impl State {
-    // TODO: Extract stuff into separate functions
-    /// Draw the UI of the area that shows the cues and DCAs
+    /// Draw the UI of the area that shows the cues and DCAs. Note that keyboard interactions are
+    /// handled centrally, while mouse click handling is colocated with the code that creates the
+    /// particular UI element.
     fn cues_ui(&mut self, ui: &mut egui::Ui) {
         self.cues_ui_popup(ui);
 
         ui.horizontal(|ui| {
             // Left aligned part
+            let editing = self.cues_is_editing();
             ui.horizontal(|ui| {
-                if ui.button("Add cue at bot.").clicked() {
+                if editing && ui.button("Add cue at bot.").clicked() {
                     let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
                     new_bottom_num.increment_lowest();
                     self.cues_add_cue(super::Cue::default(), new_bottom_num);
                 }
-                if ui.button("Undo").clicked() {
+                if editing && ui.button("Undo").clicked() {
                     self.cues_do_undo();
                 }
-                if ui.button("Redo").clicked() {
+                if editing && ui.button("Redo").clicked() {
                     self.cues_do_redo();
                 }
-                if ui.button("Channel names").clicked() {
+                if editing && ui.button("Channel names").clicked() {
                     self.cues_begin_edit_action(CuesUiMode::EditChannelNames);
                 }
             });
             // Right aligned part
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                if ui.add(egui::Button::selectable(self.cues_is_show(), "Show")).clicked() {
+                if ui
+                    .add(egui::Button::selectable(self.cues_is_show(), "Show"))
+                    .clicked()
+                {
                     *self.cues_ui_safety_mut() = CuesUiSafety::Show;
+                    // End any edit actions if we transition to show mode
+                    self.cues_end_edit_action();
                 }
                 // This one is first because right to left
-                if ui.add(egui::Button::selectable(self.cues_is_editing(), "Edit")).clicked() {
+                if ui
+                    .add(egui::Button::selectable(self.cues_is_editing(), "Edit"))
+                    .clicked()
+                {
                     *self.cues_ui_safety_mut() = CuesUiSafety::Edit;
                 }
             });
@@ -162,8 +172,9 @@ impl State {
         // Draw the grid with cues and dcas
         self.cues_table(ui);
 
-        // If del key pressed, delete selected cue
-        if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
+        // If del key pressed, delete selected cue (with safety)
+        if self.cues_is_editing()
+            && ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
             && let Some(index) = self.cues_selected_cue()
             && let Some(cue_num) = self.cues().keys().nth(index)
         {
@@ -178,15 +189,13 @@ impl State {
             self.fire_next_cue();
         }
     }
-    /// Draw the cues table and stuff. Returns if and which dca assignment cell was double-clicked
-    /// as `(cue_ind, dca_ind)`.
+    /// Draw the cues table
     fn cues_table(&mut self, ui: &mut egui::Ui) {
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 30.0;
         const DESC_WIDTH: f32 = 300.0;
 
         // Draw the ui
-        let mut double_clicked_cell: Option<(usize, usize)> = None;
         let num_dcas = self.num_dcas();
         TableBuilder::new(ui)
             // All columns must be "pre-allocated"
@@ -214,139 +223,154 @@ impl State {
             .body(|body| {
                 body.rows(ROW_HEIGHT, self.cues().len(), |mut row| {
                     row.set_hovered(false); // Otherwise it does an ugly highlight when you mouse over
-
                     let i = row.index();
-
-                    // Selected row
+                    // Draw highlight if selected row
                     if let Some(sel_ind) = self.cues_selected_cue()
                         && sel_ind == i
                     {
                         row.set_selected(true);
                     }
-
+                    // Draw the contents of each column
                     // Cue
-                    let cue_response = row.col(|ui| {
-                        if let CuesUiMode::RenumberCue {
-                            cue_ind,
-                            input_text,
-                        } = self.cues_ui_mode_mut()
-                            && *cue_ind == i
-                        {
-                            let response = ui.text_edit_singleline(input_text);
-                            // If finished editing cue number
-                            if response.lost_focus() {
-                                let input: Result<CueNumber, _> = CueNumber::parse(input_text);
-                                let cue_ind = *cue_ind; // copying the value because borrow checker
-                                if let Ok(new_cue_num) = input
-                                    && let Some(current_cue_num) = self.cues().keys().nth(cue_ind)
-                                {
-                                    self.cues_renumber_cue((*current_cue_num).clone(), new_cue_num);
-                                }
-                                self.cues_end_edit_action();
-                            }
-                            response.request_focus();
-                        } else {
-                            ui.horizontal_centered(|ui| {
-                                let cue_num = self
-                                    .cues()
-                                    .keys()
-                                    .nth(i)
-                                    .map(|n| n.to_string())
-                                    .unwrap_or("?".to_string());
-                                ui.add(egui::Label::new(cue_num).selectable(false));
-                            });
-                        }
-                    });
-                    if cue_response.1.double_clicked() {
-                        let cue_num = self
-                            .cues()
-                            .keys()
-                            .nth(i)
-                            .map(|n| n.to_string())
-                            .unwrap_or("?".to_string());
-                        self.cues_begin_edit_action(CuesUiMode::RenumberCue {
-                            cue_ind: i,
-                            input_text: cue_num,
-                        })
-                    }
+                    self.cues_table_cue(&mut row);
                     // Desc
-                    let desc_response = row.col(|ui| {
-                        let layout = egui::Layout::left_to_right(egui::Align::Center)
-                            .with_main_wrap(true)
-                            .with_cross_justify(true);
-                        ui.with_layout(layout, |ui| {
-                            if let CuesUiMode::EditCueDesc { cue_ind } = *self.cues_ui_mode()
-                                && cue_ind == i
-                            {
-                                if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
-                                    let response = ui.text_edit_singleline(cue.edit_name());
-                                    if response.lost_focus() {
-                                        self.cues_end_edit_action();
-                                    }
-                                    response.request_focus();
-                                } else {
-                                    log::warn!(
-                                        "Unable to get cue at index {cue_ind} to edit description"
-                                    );
-                                }
-                            } else {
-                                let desc_text = if let Some(cue) = self.cues().values().nth(i) {
-                                    cue.name()
-                                } else {
-                                    ""
-                                };
-                                ui.add(egui::Label::new(desc_text).selectable(false));
-                            }
-                        });
-                    });
-                    if desc_response.1.double_clicked() {
-                        self.cues_begin_edit_action(CuesUiMode::EditCueDesc { cue_ind: i })
-                    }
+                    self.cues_table_desc(&mut row);
                     // DCAs
-                    if let Some(cue) = &self.cues().values().nth(i) {
-                        for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
-                            let (_, response) = row.col(|ui| {
-                                let dca_name = dca.name(self.cues_ch_names());
-                                if !dca_name.is_empty() {
-                                    let layout = egui::Layout::top_down(egui::Align::Center)
-                                        .with_main_justify(true)
-                                        .with_cross_align(egui::Align::Center);
-                                    ui.with_layout(layout, |ui| {
-                                        ui.add(
-                                            egui::Label::new(dca_name.to_string())
-                                                .selectable(false),
-                                        );
-                                    });
-                                } else {
-                                    ui.centered_and_justified(|ui| {
-                                        ui.add(
-                                            egui::Label::new(
-                                                egui::RichText::new(format!("{}", j + 1))
-                                                    .weak()
-                                                    .italics(),
-                                            )
-                                            .selectable(false),
-                                        );
-                                    });
-                                }
-                            });
-                            if response.double_clicked() {
-                                double_clicked_cell = Some((i, j));
-                            }
-                        }
-                        // Select row if clicked
-                        if row.response().clicked() {
-                            self.cues_set_selected(Some(i));
-                            self.fire_selected_cue();
-                        }
-                    } else {
-                        log::warn!("Could not find cue at index {i}");
+                    self.cues_table_dcas(&mut row);
+
+                    // Select row and fire cue if clicked (edit) or if double clicked (show)
+                    if (self.cues_is_editing() && row.response().clicked())
+                        || row.response().double_clicked()
+                    {
+                        self.cues_set_selected(Some(i));
+                        self.fire_selected_cue();
                     }
                 })
             });
-        // If a DCA was double clicked, edit its assignment
-        if let Some((i, j)) = double_clicked_cell
-            && let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]) {
+    }
+    /// Draws the Cue (number) column as the next column in the provided row
+    fn cues_table_cue(&mut self, row: &mut egui_extras::TableRow) {
+        let i = row.index();
+        let cue_response = row.col(|ui| {
+            if let CuesUiMode::RenumberCue {
+                cue_ind,
+                input_text,
+            } = self.cues_ui_mode_mut()
+                && *cue_ind == i
+            {
+                let response = ui.text_edit_singleline(input_text);
+                // If finished editing cue number
+                if response.lost_focus() {
+                    let input: Result<CueNumber, _> = CueNumber::parse(input_text);
+                    let cue_ind = *cue_ind; // copying the value because borrow checker
+                    if let Ok(new_cue_num) = input
+                        && let Some(current_cue_num) = self.cues().keys().nth(cue_ind)
+                    {
+                        self.cues_renumber_cue((*current_cue_num).clone(), new_cue_num);
+                    }
+                    self.cues_end_edit_action();
+                }
+                response.request_focus();
+            } else {
+                ui.horizontal_centered(|ui| {
+                    let cue_num = self
+                        .cues()
+                        .keys()
+                        .nth(i)
+                        .map(|n| n.to_string())
+                        .unwrap_or("?".to_string());
+                    ui.add(egui::Label::new(cue_num).selectable(false));
+                });
+            }
+        });
+        // If editing and double click, renumber the cue
+        if self.cues_is_editing() && cue_response.1.double_clicked() {
+            let cue_num = self
+                .cues()
+                .keys()
+                .nth(i)
+                .map(|n| n.to_string())
+                .unwrap_or("?".to_string());
+            self.cues_begin_edit_action(CuesUiMode::RenumberCue {
+                cue_ind: i,
+                input_text: cue_num,
+            })
+        }
+    }
+    /// Draws the Desc column as the next column in the provided row
+    fn cues_table_desc(&mut self, row: &mut egui_extras::TableRow) {
+        let i = row.index();
+        let desc_response = row.col(|ui| {
+            let layout = egui::Layout::left_to_right(egui::Align::Center)
+                .with_main_wrap(true)
+                .with_cross_justify(true);
+            ui.with_layout(layout, |ui| {
+                if let CuesUiMode::EditCueDesc { cue_ind } = *self.cues_ui_mode()
+                    && cue_ind == i
+                {
+                    if let Some(cue) = self.cues_mut().values_mut().nth(cue_ind) {
+                        let response = ui.text_edit_singleline(cue.edit_name());
+                        if response.lost_focus() {
+                            self.cues_end_edit_action();
+                        }
+                        response.request_focus();
+                    } else {
+                        log::warn!("Unable to get cue at index {cue_ind} to edit description");
+                    }
+                } else {
+                    let desc_text = if let Some(cue) = self.cues().values().nth(i) {
+                        cue.name()
+                    } else {
+                        ""
+                    };
+                    ui.add(egui::Label::new(desc_text).selectable(false));
+                }
+            });
+        });
+        // If editing and double click, edit the description
+        if self.cues_is_editing() && desc_response.1.double_clicked() {
+            self.cues_begin_edit_action(CuesUiMode::EditCueDesc { cue_ind: i })
+        }
+    }
+    /// Draws the DCA X columns as the next columns in the provided row
+    fn cues_table_dcas(&mut self, row: &mut egui_extras::TableRow) {
+        let i = row.index();
+        let num_dcas = self.num_dcas();
+        let mut double_clicked_cell: Option<(usize, usize)> = None;
+        if let Some(cue) = &self.cues().values().nth(i) {
+            for (j, dca) in cue.dcas().iter().take(num_dcas.into()).enumerate() {
+                let (_, response) = row.col(|ui| {
+                    let dca_name = dca.name(self.cues_ch_names());
+                    if !dca_name.is_empty() {
+                        let layout = egui::Layout::top_down(egui::Align::Center)
+                            .with_main_justify(true)
+                            .with_cross_align(egui::Align::Center);
+                        ui.with_layout(layout, |ui| {
+                            ui.add(egui::Label::new(dca_name.to_string()).selectable(false));
+                        });
+                    } else {
+                        ui.centered_and_justified(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("{}", j + 1)).weak().italics(),
+                                )
+                                .selectable(false),
+                            );
+                        });
+                    }
+                });
+                if response.double_clicked() {
+                    double_clicked_cell = Some((i, j));
+                }
+            }
+        } else {
+            log::warn!("Could not find cue at index {i}");
+        }
+        // If editing and a DCA was double clicked, edit its assignment
+        if self.cues_is_editing()
+            && let Some((i, j)) = double_clicked_cell
+            && let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j])
+        {
             self.cues_begin_edit_action(CuesUiMode::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
@@ -419,28 +443,25 @@ impl State {
     fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui) {
         // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
         // of the function, we assign `copied_cue` back to the actual cue.
-        let (mut copied_cue, cue_ind, _dca_ind) = if let CuesUiMode::EditDcaAssign {
-            cue_ind,
-            dca_ind,
-            ..
-        } = self.cues_ui_mode()
-        {
-            let cue = self.cues().values().nth(*cue_ind).cloned();
-            if let Some(cue) = cue {
-                (cue, *cue_ind, *dca_ind)
+        let (mut copied_cue, cue_ind, _dca_ind) =
+            if let CuesUiMode::EditDcaAssign {
+                cue_ind, dca_ind, ..
+            } = self.cues_ui_mode()
+            {
+                let cue = self.cues().values().nth(*cue_ind).cloned();
+                if let Some(cue) = cue {
+                    (cue, *cue_ind, *dca_ind)
+                } else {
+                    log::warn!("Unable to get cue we are editing");
+                    return;
+                }
             } else {
-                log::warn!("Unable to get cue we are editing");
+                log::warn!("Edit dca assign popup called but we are not editing a dca");
                 return;
-            }
-        } else {
-            log::warn!("Edit dca assign popup called but we are not editing a dca");
-            return;
-        };
+            };
 
         if let CuesUiMode::EditDcaAssign {
-            cue_ind,
-            dca_ind,
-            ..
+            cue_ind, dca_ind, ..
         } = self.cues_ui_mode()
         {
             egui::Window::new("Edit DCA Assignments")

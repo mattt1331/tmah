@@ -28,26 +28,39 @@ impl super::State {
                 ref original_dca_state,
             } => {
                 if let Some((_, cue)) = self.cues().iter().nth(cue_ind)
-                    && let Some(current_dca_state) = cue.dcas().iter().nth(dca_ind) {
-                        let original_dca_state = original_dca_state.clone();
-                        let current_dca_state = current_dca_state.clone();
-                        if original_dca_state != current_dca_state {
-                            let undo = move |data: &mut CuesData| {
-                                let cue_ind = cue_ind;
-                                let dca_ind = dca_ind;
-                                let original_dca_state = original_dca_state;
-                                data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| cue.dcas_mut().iter_mut().nth(dca_ind).map(|dca| *dca = original_dca_state));
-                            };
-                            let redo = move |data: &mut CuesData| {
-                                let cue_ind = cue_ind;
-                                let dca_ind = dca_ind;
-                                let new_dca_state = current_dca_state;
-                                data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| cue.dcas_mut().iter_mut().nth(dca_ind).map(|dca| *dca = new_dca_state));
-                            };
-                            self.cues_stack_action(Box::new(undo), Box::new(redo));
-                        }
+                    && let Some(current_dca_state) = cue.dcas().iter().nth(dca_ind)
+                {
+                    let original_dca_state = original_dca_state.clone();
+                    let current_dca_state = current_dca_state.clone();
+                    if original_dca_state != current_dca_state {
+                        let undo = move |data: &mut CuesData| {
+                            let cue_ind = cue_ind;
+                            let dca_ind = dca_ind;
+                            let original_dca_state = original_dca_state;
+                            data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| {
+                                cue.dcas_mut()
+                                    .iter_mut()
+                                    .nth(dca_ind)
+                                    .map(|dca| *dca = original_dca_state)
+                            });
+                        };
+                        let redo = move |data: &mut CuesData| {
+                            let cue_ind = cue_ind;
+                            let dca_ind = dca_ind;
+                            let new_dca_state = current_dca_state;
+                            data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| {
+                                cue.dcas_mut()
+                                    .iter_mut()
+                                    .nth(dca_ind)
+                                    .map(|dca| *dca = new_dca_state)
+                            });
+                        };
+                        self.cues_stack_action(Box::new(undo), Box::new(redo));
+                    }
                 } else {
-                    log::error!("Could not find DCA at index {dca_ind} or its cue at index {cue_ind} to setup undoing DCA edits");
+                    log::error!(
+                        "Could not find DCA at index {dca_ind} or its cue at index {cue_ind} to setup undoing DCA edits"
+                    );
                 }
             }
             ui::CuesUiMode::EditCueDesc { cue_ind: _ } => {
