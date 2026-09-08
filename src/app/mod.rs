@@ -7,7 +7,7 @@ mod ui;
 
 use board::Channel;
 pub use board::Decibels;
-pub use cues::{ChannelNames, Cue, CueNumber, CuesData, CuesEditAction, CuesEditActionPrime};
+pub use cues::{ChannelNames, Cue, CueNumber, CuesData, CuesEditAction};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,11 +22,10 @@ pub struct State {
     cues_ui_safety: ui::CuesUiSafety,
     cues_selected_cue_ind: Option<usize>,
     // FIXME: Refactor this atrocity.
-    /// An objectively terrible implementation, true, but it's funny. A stack of undo actions. When
-    /// undo is pressed, pop off the last one and run it on `State`. When an undoable action
-    /// occurs, add the undo action to the stack.
-    cues_undo_stack: Vec<Box<CuesEditAction>>,
-    cues_action_stack: Vec<(Box<CuesEditActionPrime>, Box<CuesEditActionPrime>)>,
+    /// An objectively terrible implementation, true, but it's funny. A stack of undo/redo actions.
+    /// When undo is pressed, the backtrack counter is increased, and when redo is pressed, it is
+    /// decreased.
+    cues_action_stack: Vec<(Box<CuesEditAction>, Box<CuesEditAction>)>,
     cues_action_stack_backtracks: usize,
 
     // Board
@@ -52,7 +51,6 @@ impl Default for State {
             cues_ui_mode: ui::CuesUiMode::default(),
             cues_ui_safety: ui::CuesUiSafety::default(),
             cues_selected_cue_ind: None,
-            cues_undo_stack: Vec::default(),
             cues_action_stack: Vec::default(),
             cues_action_stack_backtracks: usize::default(),
             board_connection_ui: board::Connections::default(),

@@ -4,7 +4,6 @@ use super::board;
 use super::{Channel, CueNumber, State};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
-use std::collections::BTreeSet;
 
 /// The different screens of the ui, like the cues, board connection, etc
 #[derive(Default, PartialEq)]

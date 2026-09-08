@@ -37,23 +37,13 @@ impl super::State {
                             let cue_ind = cue_ind;
                             let dca_ind = dca_ind;
                             let original_dca_state = original_dca_state;
-                            data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| {
-                                cue.dcas_mut()
-                                    .iter_mut()
-                                    .nth(dca_ind)
-                                    .map(|dca| *dca = original_dca_state)
-                            });
+                            data.set_dca_state(cue_ind, dca_ind, original_dca_state);
                         };
                         let redo = move |data: &mut CuesData| {
                             let cue_ind = cue_ind;
                             let dca_ind = dca_ind;
                             let new_dca_state = current_dca_state;
-                            data.cues_mut().iter_mut().nth(cue_ind).map(|(_, cue)| {
-                                cue.dcas_mut()
-                                    .iter_mut()
-                                    .nth(dca_ind)
-                                    .map(|dca| *dca = new_dca_state)
-                            });
+                            data.set_dca_state(cue_ind, dca_ind, new_dca_state);
                         };
                         self.cues_stack_action(Box::new(undo), Box::new(redo));
                     }
@@ -184,8 +174,8 @@ impl super::State {
     /// be redone from this point.
     pub fn cues_stack_action(
         &mut self,
-        backwards_action: Box<CuesEditActionPrime>,
-        forwards_action: Box<CuesEditActionPrime>,
+        backwards_action: Box<CuesEditAction>,
+        forwards_action: Box<CuesEditAction>,
     ) {
         self.cues_action_stack
             .truncate(self.cues_action_stack.len() - self.cues_action_stack_backtracks);
@@ -195,9 +185,8 @@ impl super::State {
     }
 }
 
-pub type CuesEditAction = dyn FnOnce(&mut State);
 /// Some action which edits a `CuesData`
-pub type CuesEditActionPrime = dyn CloneableClosure;
+pub type CuesEditAction = dyn CloneableClosure;
 /// This trait denotes and is automatically implemented for closures which can be cloned and which
 /// we can move values into.
 /// Because you could undo, redo, undo, redo the same action multiple times, we use these closures
