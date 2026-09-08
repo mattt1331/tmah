@@ -160,17 +160,7 @@ impl State {
         ui.add_space(10.0);
 
         // Draw the grid with cues and dcas
-        let double_clicked_cell = self.cues_table(ui);
-
-        // If a DCA was double clicked, edit its assignment
-        if let Some((i, j)) = double_clicked_cell
-            && let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]) {
-            self.cues_begin_edit_action(CuesUiMode::EditDcaAssign {
-                cue_ind: i,
-                dca_ind: j,
-                original_dca_state: dca.clone(),
-            });
-        }
+        self.cues_table(ui);
 
         // If del key pressed, delete selected cue
         if ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
@@ -190,7 +180,7 @@ impl State {
     }
     /// Draw the cues table and stuff. Returns if and which dca assignment cell was double-clicked
     /// as `(cue_ind, dca_ind)`.
-    fn cues_table(&mut self, ui: &mut egui::Ui) -> Option<(usize, usize)> {
+    fn cues_table(&mut self, ui: &mut egui::Ui) {
         const HEADER_HEIGHT: f32 = 20.0;
         const ROW_HEIGHT: f32 = 30.0;
         const DESC_WIDTH: f32 = 300.0;
@@ -354,7 +344,15 @@ impl State {
                     }
                 })
             });
-        double_clicked_cell
+        // If a DCA was double clicked, edit its assignment
+        if let Some((i, j)) = double_clicked_cell
+            && let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j]) {
+            self.cues_begin_edit_action(CuesUiMode::EditDcaAssign {
+                cue_ind: i,
+                dca_ind: j,
+                original_dca_state: dca.clone(),
+            });
+        }
     }
     /// Draw the popup, if any, in the cues screen
     fn cues_ui_popup(&mut self, ui: &mut egui::Ui) {
