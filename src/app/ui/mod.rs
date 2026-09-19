@@ -2,7 +2,7 @@
 
 use super::board;
 use super::{Channel, CueNumber, State};
-use eframe::egui;
+use eframe::egui::{self, Key, Modifiers};
 use egui_extras::{Column, TableBuilder};
 
 /// The different screens of the ui, like the cues, board connection, etc
@@ -68,7 +68,7 @@ impl eframe::App for State {
             // ctrl-s to save
             if ui
                 .ctx()
-                .input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::S))
+                .input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::S))
             {
                 self.file_save(ui);
             }
@@ -171,21 +171,36 @@ impl State {
         // Draw the grid with cues and dcas
         self.cues_table(ui);
 
+        // Handle keyboard input aimed at the main area
+        self.cues_input(ui);
+    }
+    /// Handle all the keyboard inputs for the main cues screen
+    fn cues_input(&mut self, ui: &mut egui::Ui) {
         // If del key pressed, delete selected cue (with safety)
         if self.cues_is_editing()
-            && ui.ctx().input(|input| input.key_pressed(egui::Key::Delete))
+            && ui
+                .ctx()
+                .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Delete))
             && let Some(index) = self.cues_selected_cue()
             && let Some(cue_num) = self.cues().keys().nth(index)
         {
             let cue_num = cue_num.clone();
             self.cues_delete_cue(&cue_num);
         }
-
         // Space to GO
-        if ui.ctx().input(|input| input.key_pressed(egui::Key::Space))
+        if ui
+            .ctx()
+            .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Space))
             && matches!(self.cues_ui_mode(), CuesUiMode::None)
         {
             self.fire_next_cue();
+        }
+        // Escape to kill popups
+        let ctx = ui.ctx();
+        if !ctx.egui_wants_keyboard_input()
+            && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape))
+        {
+            self.cues_end_edit_action();
         }
     }
     /// Draw the cues table
@@ -379,11 +394,6 @@ impl State {
     }
     /// Draw the popup, if any, in the cues screen
     fn cues_ui_popup(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx();
-        if !ctx.egui_wants_keyboard_input() && ctx.input(|input| input.key_down(egui::Key::Escape))
-        {
-            self.cues_end_edit_action();
-        }
         match *self.cues_ui_mode() {
             CuesUiMode::None => (),
             CuesUiMode::EditChannelNames => {
@@ -434,7 +444,9 @@ impl State {
                             })
                     });
             }
-            CuesUiMode::EditDcaAssign { cue_ind, dca_ind, .. } => self.cues_ui_popup_dca_assign(ui, cue_ind, dca_ind),
+            CuesUiMode::EditDcaAssign {
+                cue_ind, dca_ind, ..
+            } => self.cues_ui_popup_dca_assign(ui, cue_ind, dca_ind),
             CuesUiMode::EditCueDesc { .. } | CuesUiMode::RenumberCue { .. } => (), // Not a popup
         }
     }
