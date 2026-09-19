@@ -154,7 +154,6 @@ impl super::State {
                 .0
                 .box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks += 1;
-            log::error!("Undoing. actions={}, backtracks={}", self.cues_action_stack.len(), self.cues_action_stack_backtracks);
         }
     }
     /// Checks whether we can redo right now.
@@ -169,7 +168,6 @@ impl super::State {
                 .1
                 .box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks -= 1;
-            log::error!("Redoing. actions={}, backtracks={}", self.cues_action_stack.len(), self.cues_action_stack_backtracks);
         }
     }
     /// Adds the given undo/redo action to the top of the stack, discarding any actions which could

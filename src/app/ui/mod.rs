@@ -136,6 +136,7 @@ impl State {
                     let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
                     new_bottom_num.increment_lowest();
                     self.cues_add_cue(super::Cue::default(), new_bottom_num);
+                    self.cues_begin_edit_action(CuesUiMode::EditCueDesc { cue_ind: self.cues().len()-1 });
                 }
                 // FIXME: Add undos for editing cue descriptions
                 if editing && ui.button("Undo").clicked() {
