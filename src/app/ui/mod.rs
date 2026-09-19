@@ -471,10 +471,14 @@ impl State {
                     });
                     // Copy/paste buttons
                     ui.horizontal(|ui| {
-                        if ui.button("Copy").clicked() {
+                        if ui.button("Copy").clicked() 
+                            || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::Y))
+                        {
                             *self.cues_copied_dca_mut() = Some(copied_cue.dcas()[dca_ind].clone());
                         }
-                        if ui.button("Paste").clicked() {
+                        if ui.button("Paste").clicked()
+                            || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::P))
+                        {
                             if let Some(pasted_dca) = self.cues_copied_dca().clone() {
                                 copied_cue.dcas_mut()[dca_ind] = pasted_dca;
                             }
