@@ -183,6 +183,10 @@ impl super::State {
             .push((backwards_action, forwards_action));
         self.cues_action_stack_backtracks = 0;
     }
+    /// Removes all undo/redo entries from the action stack.
+    pub fn cues_delete_action_stack(&mut self) {
+        self.cues_action_stack.clear();
+    }
 }
 
 /// Some action which edits a `CuesData`

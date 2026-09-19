@@ -40,10 +40,12 @@ impl State {
             channel_names: self.cues_ch_names().clone(),
         }
     }
-    /// Loads the given data (ie sets state equal to provided values)
+    /// Loads the given data (ie sets state equal to provided values) and clears the cues undo list
     pub fn file_load_data(&mut self, data: FileData) {
         *self.cues_mut() = data.cues;
         *self.cues_ch_names_mut() = data.channel_names;
+        // Now that a new file is loaded, the undos/redos are no longer valid
+        self.cues_delete_action_stack();
     }
 }
 
