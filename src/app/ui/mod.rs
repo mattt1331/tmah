@@ -137,11 +137,37 @@ impl State {
                     new_bottom_num.increment_lowest();
                     self.cues_add_cue(super::Cue::default(), new_bottom_num);
                 }
+                // FIXME: Add undos for editing cue descriptions
                 if editing && ui.button("Undo").clicked() {
                     self.cues_do_undo();
                 }
                 if editing && ui.button("Redo").clicked() {
                     self.cues_do_redo();
+                }
+                if editing
+                    && (ui.add_enabled(self.cues_selected_cue().is_some(), egui::Button::new("Copy")).clicked()
+                    || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::Y)))
+                    && let Some(sel_cue_ind) = self.cues_selected_cue()
+                {
+                    if let Some(cue) = self.cues().values().nth(sel_cue_ind) {
+                        *self.cues_copied_cue_mut() = Some(cue.clone());
+                    }
+                }
+                if editing
+                    && (ui.add_enabled(self.cues_copied_cue().is_some(), egui::Button::new("Paste")).clicked()
+                    || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::P)))
+                {
+                    if let Some(sel_cue_ind) = self.cues_selected_cue()
+                        && let Some(insert_location) = self.cues().keys().nth(sel_cue_ind)
+                    {
+                        let mut insert_location = insert_location.clone();
+                        insert_location.increment_lowest();
+                        self.cues_add_cue(self.cues_copied_cue().clone().unwrap_or_default(), insert_location);
+                    } else {
+                        let mut insert_location = self.cues().keys().last().cloned().unwrap_or_default();
+                        insert_location.increment_lowest();
+                        self.cues_add_cue(self.cues_copied_cue().clone().unwrap_or_default(), insert_location);
+                    }
                 }
                 if editing && ui.button("Channel names").clicked() {
                     self.cues_begin_edit_action(CuesUiMode::EditChannelNames);
@@ -465,24 +491,27 @@ impl State {
                     } else {
                         (dca_ind + 1).to_string()
                     };
-                    // Heading
+                    // Header
                     ui.horizontal(|ui| {
-                        ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
-                    });
-                    // Copy/paste buttons
-                    ui.horizontal(|ui| {
-                        if ui.button("Copy").clicked() 
-                            || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::Y))
-                        {
-                            *self.cues_copied_dca_mut() = Some(copied_cue.dcas()[dca_ind].clone());
-                        }
-                        if ui.button("Paste").clicked()
-                            || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::P))
-                        {
-                            if let Some(pasted_dca) = self.cues_copied_dca().clone() {
-                                copied_cue.dcas_mut()[dca_ind] = pasted_dca;
+                        // Heading
+                        ui.horizontal(|ui| {
+                            ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
+                        });
+                        // Copy/paste buttons
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            if ui.button("Paste").clicked()
+                                || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::P))
+                            {
+                                if let Some(pasted_dca) = self.cues_copied_dca().clone() {
+                                    copied_cue.dcas_mut()[dca_ind] = pasted_dca;
+                                }
                             }
-                        }
+                            if ui.button("Copy").clicked() 
+                                || !ui.ctx().egui_wants_keyboard_input() && ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::Y))
+                            {
+                                *self.cues_copied_dca_mut() = Some(copied_cue.dcas()[dca_ind].clone());
+                            }
+                        });
                     });
                     ui.add_space(10.0);
                     // DCA name edit

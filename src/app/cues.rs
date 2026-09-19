@@ -71,13 +71,13 @@ impl super::State {
         self.cues_data.add_cue(cue.clone(), number.clone());
         let num = number.clone();
         let undo = move |data: &mut CuesData| {
+            let number = number;
+            data.remove_cue(&number);
+        };
+        let redo = move |data: &mut CuesData| {
             let cue = cue.clone();
             let number = num;
             data.add_cue(cue.clone(), number.clone());
-        };
-        let redo = move |data: &mut CuesData| {
-            let number = number;
-            data.remove_cue(&number);
         };
         self.cues_stack_action(Box::new(undo), Box::new(redo));
     }
@@ -154,6 +154,7 @@ impl super::State {
                 .0
                 .box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks += 1;
+            log::error!("Undoing. actions={}, backtracks={}", self.cues_action_stack.len(), self.cues_action_stack_backtracks);
         }
     }
     /// Checks whether we can redo right now.
@@ -168,6 +169,7 @@ impl super::State {
                 .1
                 .box_clone())(&mut self.cues_data);
             self.cues_action_stack_backtracks -= 1;
+            log::error!("Redoing. actions={}, backtracks={}", self.cues_action_stack.len(), self.cues_action_stack_backtracks);
         }
     }
     /// Adds the given undo/redo action to the top of the stack, discarding any actions which could
