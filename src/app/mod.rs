@@ -7,7 +7,7 @@ mod ui;
 
 use board::Channel;
 pub use board::Decibels;
-pub use cues::{ChannelNames, Cue, CueNumber, CuesData, CuesEditAction};
+pub use cues::{ChannelNames, Cue, CueNumber, CuesData, CuesEditAction, DcaState};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -21,6 +21,7 @@ pub struct State {
     cues_ui_mode: ui::CuesUiMode,
     cues_ui_safety: ui::CuesUiSafety,
     cues_selected_cue_ind: Option<usize>,
+    cues_copied_dca: Option<DcaState>,
     // FIXME: Refactor this atrocity.
     /// An objectively terrible implementation, true, but it's funny. A stack of undo/redo actions.
     /// When undo is pressed, the backtrack counter is increased, and when redo is pressed, it is
@@ -51,6 +52,7 @@ impl Default for State {
             cues_ui_mode: ui::CuesUiMode::default(),
             cues_ui_safety: ui::CuesUiSafety::default(),
             cues_selected_cue_ind: None,
+            cues_copied_dca: None,
             cues_action_stack: Vec::default(),
             cues_action_stack_backtracks: usize::default(),
             board_connection_ui: board::Connections::default(),
@@ -102,6 +104,12 @@ impl State {
     }
     pub fn cues_selected_cue(&self) -> Option<usize> {
         self.cues_selected_cue_ind
+    }
+    pub fn cues_copied_dca(&self) -> &Option<DcaState> {
+        &self.cues_copied_dca
+    }
+    pub fn cues_copied_dca_mut(&mut self) -> &mut Option<DcaState> {
+        &mut self.cues_copied_dca
     }
     pub fn board_connection(&self) -> &Box<dyn board::Connectable> {
         &self.board_connection

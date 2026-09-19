@@ -434,51 +434,45 @@ impl State {
                             })
                     });
             }
-            CuesUiMode::EditDcaAssign { .. } => self.cues_ui_popup_dca_assign(ui),
+            CuesUiMode::EditDcaAssign { cue_ind, dca_ind, .. } => self.cues_ui_popup_dca_assign(ui, cue_ind, dca_ind),
             CuesUiMode::EditCueDesc { .. } | CuesUiMode::RenumberCue { .. } => (), // Not a popup
         }
     }
     /// Draw the _edit DCA assignment_ popup in the cues screen
-    fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui) {
+    // FIX: Refactor this function because it is too long and a mess
+    fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui, cue_ind: usize, dca_ind: usize) {
         // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
         // of the function, we assign `copied_cue` back to the actual cue.
-        let (mut copied_cue, cue_ind, _dca_ind) =
-            if let CuesUiMode::EditDcaAssign {
-                cue_ind, dca_ind, ..
-            } = self.cues_ui_mode()
-            {
-                let cue = self.cues().values().nth(*cue_ind).cloned();
-                if let Some(cue) = cue {
-                    (cue, *cue_ind, *dca_ind)
-                } else {
-                    log::warn!("Unable to get cue we are editing");
-                    return;
-                }
-            } else {
-                log::warn!("Edit dca assign popup called but we are not editing a dca");
-                return;
-            };
-
-        if let CuesUiMode::EditDcaAssign {
-            cue_ind, dca_ind, ..
-        } = self.cues_ui_mode()
-        {
+        if let Some(mut copied_cue) = self.cues().values().nth(cue_ind).cloned() {
             egui::Window::new("Edit DCA Assignments")
                 .title_bar(false)
                 .show(ui.ctx(), |ui| {
-                    let dca_name = copied_cue.dcas()[*dca_ind].name(self.cues_ch_names());
+                    let dca_name = copied_cue.dcas()[dca_ind].name(self.cues_ch_names());
                     let dca_name = if !dca_name.is_empty() {
                         dca_name
                     } else {
                         (dca_ind + 1).to_string()
                     };
                     // Heading
-                    ui.heading(format!("Cue {}: DCA {}", *cue_ind + 1, dca_name));
+                    ui.horizontal(|ui| {
+                        ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
+                    });
+                    // Copy/paste buttons
+                    ui.horizontal(|ui| {
+                        if ui.button("Copy").clicked() {
+                            *self.cues_copied_dca_mut() = Some(copied_cue.dcas()[dca_ind].clone());
+                        }
+                        if ui.button("Paste").clicked() {
+                            if let Some(pasted_dca) = self.cues_copied_dca().clone() {
+                                copied_cue.dcas_mut()[dca_ind] = pasted_dca;
+                            }
+                        }
+                    });
                     ui.add_space(10.0);
                     // DCA name edit
                     ui.horizontal(|ui| {
                         ui.label("Name:");
-                        let dca_name = copied_cue.dcas_mut()[*dca_ind].edit_name();
+                        let dca_name = copied_cue.dcas_mut()[dca_ind].edit_name();
                         if let Some(name) = dca_name {
                             ui.text_edit_singleline(name);
                             if name.is_empty() {
@@ -496,7 +490,7 @@ impl State {
                     // Channel assignments
                     let num_channels = self.num_channels();
                     let mut assigned: Vec<bool> = vec![false; num_channels.into()];
-                    for ch in copied_cue.dcas()[*dca_ind].assigned() {
+                    for ch in copied_cue.dcas()[dca_ind].assigned() {
                         assigned[ch.index() as usize] = true;
                     }
                     let assigned_pre = assigned.clone();
@@ -517,23 +511,22 @@ impl State {
                     {
                         if pre != post {
                             if *post {
-                                copied_cue.dcas_mut()[*dca_ind]
+                                copied_cue.dcas_mut()[dca_ind]
                                     .assign(Channel::from_index(ch_ind as u8))
                             } else {
-                                copied_cue.dcas_mut()[*dca_ind]
+                                copied_cue.dcas_mut()[dca_ind]
                                     .unassign(Channel::from_index(ch_ind as u8))
                             }
                         }
                     }
                 });
-        } else {
-            log::warn!("Edit dca assign popup called but we are not editing a dca");
+
+            let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
+                log::warn!("Unable to get cue at index {}", cue_ind);
+                return;
+            };
+            *actual_cue = copied_cue;
         }
-        let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
-            log::warn!("Unable to get cue at index {}", cue_ind);
-            return;
-        };
-        *actual_cue = copied_cue;
     }
 }
 
