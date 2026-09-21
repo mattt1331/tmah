@@ -16,9 +16,9 @@ const DEFAULT_NUM_CH_CONTROL: u8 = 32;
 /// The default value of the `num_dcas_controlled` setting
 const DEFAULT_NUM_DCA_CONTROL: u8 = 8;
 /// Name of the application in MIDI
-const MIDI_CLIENT_NAME: &str = "miq-v2";
+const MIDI_CLIENT_NAME: &str = "tmah";
 /// Certain MIDI implementations have a name for the connection
-const MIDI_CONNECTION_NAME: &str = "miq-v2 connection over MIDI";
+const MIDI_CONNECTION_NAME: &str = "tmah connection over MIDI";
 
 /// A connection over MIDI to some board.
 pub struct GenericGenericMidi<Adaptor>

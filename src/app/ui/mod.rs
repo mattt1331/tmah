@@ -19,7 +19,7 @@ impl eframe::App for State {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             // Create the top menu bar and draw its buttons
             ui.horizontal(|ui| {
-                ui.heading("miq-v2");
+                ui.heading("TMaH");
                 ui.selectable_value(&mut self.ui_screen, UiScreen::File, "File");
                 ui.selectable_value(&mut self.ui_screen, UiScreen::Cues, "Cues");
                 ui.selectable_value(&mut self.ui_screen, UiScreen::Board, "Board");

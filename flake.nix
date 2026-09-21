@@ -1,5 +1,5 @@
 {
-  description = "Nix flake for miq-v2";
+  description = "Nix flake for tmah";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";

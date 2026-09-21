@@ -1,9 +1,9 @@
-var cacheName = 'miq-v2-pwa';
+var cacheName = 'tmah-pwa';
 var filesToCache = [
   './',
   './index.html',
-  './miq-v2.js',
-  './miq-v2_bg.wasm',
+  './tmah.js',
+  './tmah_bg.wasm',
 ];
 
 /* Start the service worker and cache all of the app's content */

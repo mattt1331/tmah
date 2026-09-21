@@ -2110,23 +2110,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "miq-v2"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui_extras",
- "env_logger",
- "log",
- "midir",
- "pollster",
- "rfd",
- "ron",
- "serde",
- "take_mut",
- "wasm-bindgen-futures",
-]
-
-[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3542,6 +3525,23 @@ checksum = "c8323304221c2a851516f22236c5722a72eaa19749016521d6dff0824447d96d"
 dependencies = [
  "displaydoc",
  "zerovec",
+]
+
+[[package]]
+name = "tmah"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui_extras",
+ "env_logger",
+ "log",
+ "midir",
+ "pollster",
+ "rfd",
+ "ron",
+ "serde",
+ "take_mut",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

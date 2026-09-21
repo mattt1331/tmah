@@ -1,6 +1,6 @@
-# miq-v2
+# tmah
 
-Like TheatreMix. TODO put something here
+Like TheatreMix, but made at home. TODO put something here
 
 ## Project Documentation
 
