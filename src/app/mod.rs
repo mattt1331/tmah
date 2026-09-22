@@ -126,12 +126,12 @@ impl State {
 /// Methods with additional logic
 impl State {
     /// The key for eframe's persistent storage where we will autosave the file to
-    const PERSISTANT_STORAGE_KEY: &str = "miq_v2.file_data";
+    const PERSISTENT_STORAGE_KEY: &str = "miq_v2.file_data";
     /// Create a new `State` and load any persisted values
     pub fn new(cc: &eframe::CreationContext) -> Self {
         let mut out = Self::default();
         if let Some(storage) = cc.storage
-            && let Some(persist_data) = storage.get_string(Self::PERSISTANT_STORAGE_KEY)
+            && let Some(persist_data) = storage.get_string(Self::PERSISTENT_STORAGE_KEY)
         {
             match file::FileData::deserialize(persist_data.as_bytes()) {
                 Ok(file_data) => out.file_load_data(file_data),

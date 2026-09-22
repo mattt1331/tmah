@@ -14,7 +14,7 @@ impl super::State {
         self.cues_ui_mode = action;
     }
     /// Ends any active cues edit action. This function exists so that any edit that needs to stack
-    /// an undo can do so if it is interrupted by another edit begining. Edits which modify state
+    /// an undo can do so if it is interrupted by another edit beginning. Edits which modify state
     /// continuously (as in, not the ones where you hit enter and you're done) use this mechanism.
     pub fn cues_end_edit_action(&mut self) {
         match self.cues_ui_mode {
