@@ -173,24 +173,9 @@ impl State {
                                 .ctx()
                                 .input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::P)))
                 {
-                    if let Some(sel_cue_ind) = self.cues_selected_cue()
-                        && let Some(insert_location) = self.cues().keys().nth(sel_cue_ind)
-                    {
-                        let mut insert_location = insert_location.clone();
-                        insert_location.increment_lowest();
-                        self.cues_insert_cue(
-                            self.cues_copied_cue().clone().unwrap_or_default(),
-                            insert_location,
-                        );
-                    } else {
-                        let mut insert_location =
-                            self.cues().keys().last().cloned().unwrap_or_default();
-                        insert_location.increment_lowest();
-                        self.cues_insert_cue(
-                            self.cues_copied_cue().clone().unwrap_or_default(),
-                            insert_location,
-                        );
-                    }
+                    self.cues_insert_cue_contextual(
+                        self.cues_copied_cue().clone().unwrap_or_default(),
+                    );
                 }
                 if editing && ui.button("Channel names").clicked() {
                     self.cues_begin_edit_action(CuesUiMode::EditChannelNames);

@@ -61,6 +61,28 @@ impl super::State {
         }
         self.cues_ui_mode = ui::CuesUiMode::None;
     }
+    /// Insert the given cue at a contextually reasonable location. If a cue is selected, try to
+    /// insert there, if not, insert at bottom.
+    pub fn cues_insert_cue_contextual(&mut self, cue: Cue) {
+        if let Some(selected_cue_ind) = self.cues_selected_cue()
+            && let Some(mut selected_cue_number) = self.cues().keys().nth(selected_cue_ind).cloned()
+        {
+            let mut inc_low = selected_cue_number.clone();
+            inc_low.increment_lowest();
+            if self.cues().get(&inc_low).is_none() {
+                self.cues_insert_cue(cue, inc_low);
+            } else {
+                selected_cue_number.increment_next();
+                if self.cues().get(&selected_cue_number).is_none() {
+                    self.cues_insert_cue(cue, selected_cue_number);
+                } else {
+                    self.cues_insert_cue_bottom(cue);
+                }
+            }
+        } else {
+            self.cues_insert_cue_bottom(cue);
+        }
+    }
     /// Insert the given cue at the bottom of the cue list.
     pub fn cues_insert_cue_bottom(&mut self, cue: Cue) {
         let mut bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
@@ -71,7 +93,10 @@ impl super::State {
     pub fn cues_insert_cue(&mut self, cue: Cue, number: CueNumber) {
         // Check that there isn't already a cue at this number
         if self.cues().contains_key(&number) {
-            log::warn!("Did not insert cue because this number is already occupied");
+            log::warn!(
+                "Did not insert cue because number {:?} is already occupied",
+                number
+            );
             return;
         }
         self.cues_data.add_cue(cue.clone(), number.clone());
@@ -305,6 +330,14 @@ impl CueNumber {
             }
         } else {
             self.0 += 1;
+        }
+    }
+    /// If the number has a level not yet set, init that level (eg 1.1 -> 1.1.1)
+    pub fn increment_next(&mut self) {
+        if let CueNumber(a, None) = self {
+            *self = CueNumber(*a, Some((0, None)));
+        } else if let CueNumber(a, Some((b, None))) = self {
+            *self = CueNumber(*a, Some((*b, Some(0))));
         }
     }
 }
