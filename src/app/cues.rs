@@ -61,8 +61,8 @@ impl super::State {
         }
         self.cues_ui_mode = ui::CuesUiMode::None;
     }
-    /// Adds the given cue at the given number.
-    pub fn cues_add_cue(&mut self, cue: Cue, number: CueNumber) {
+    /// Inserts the given cue at the given number.
+    pub fn cues_insert_cue(&mut self, cue: Cue, number: CueNumber) {
         // Check that there isn't already a cue at this number
         if self.cues().contains_key(&number) {
             log::warn!("Did not insert cue because this number is already occupied");

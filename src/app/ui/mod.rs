@@ -135,7 +135,7 @@ impl State {
                 if editing && ui.button("Add cue at bot.").clicked() {
                     let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
                     new_bottom_num.increment_lowest();
-                    self.cues_add_cue(super::Cue::default(), new_bottom_num);
+                    self.cues_insert_cue(super::Cue::default(), new_bottom_num);
                     self.cues_begin_edit_action(CuesUiMode::EditCueDesc {
                         cue_ind: self.cues().len() - 1,
                     });
@@ -147,6 +147,8 @@ impl State {
                 if editing && ui.button("Redo").clicked() {
                     self.cues_do_redo();
                 }
+                // FIX: The code for this button and esp the one below are terrible and
+                // unreadable. extract, fix, etc
                 if editing
                     && (ui
                         .add_enabled(
@@ -178,7 +180,7 @@ impl State {
                     {
                         let mut insert_location = insert_location.clone();
                         insert_location.increment_lowest();
-                        self.cues_add_cue(
+                        self.cues_insert_cue(
                             self.cues_copied_cue().clone().unwrap_or_default(),
                             insert_location,
                         );
@@ -186,7 +188,7 @@ impl State {
                         let mut insert_location =
                             self.cues().keys().last().cloned().unwrap_or_default();
                         insert_location.increment_lowest();
-                        self.cues_add_cue(
+                        self.cues_insert_cue(
                             self.cues_copied_cue().clone().unwrap_or_default(),
                             insert_location,
                         );
