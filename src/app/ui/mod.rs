@@ -133,9 +133,7 @@ impl State {
             let editing = self.cues_is_editing();
             ui.horizontal(|ui| {
                 if editing && ui.button("Add cue at bot.").clicked() {
-                    let mut new_bottom_num = self.cues().keys().last().cloned().unwrap_or_default();
-                    new_bottom_num.increment_lowest();
-                    self.cues_insert_cue(super::Cue::default(), new_bottom_num);
+                    self.cues_insert_cue_bottom(super::Cue::default());
                     self.cues_begin_edit_action(CuesUiMode::EditCueDesc {
                         cue_ind: self.cues().len() - 1,
                     });
