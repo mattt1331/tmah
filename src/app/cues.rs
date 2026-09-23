@@ -25,6 +25,7 @@ impl super::State {
             ui::CuesUiMode::EditDcaAssign {
                 cue_ind,
                 dca_ind,
+                is_kbd_editing: _,
                 ref original_dca_state,
             } => {
                 if let Some((_, cue)) = self.cues().iter().nth(cue_ind)

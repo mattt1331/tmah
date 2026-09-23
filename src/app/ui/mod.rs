@@ -1,7 +1,7 @@
 //! Contains all the UI
 
 use super::board;
-use super::{Channel, CueNumber, State};
+use super::{Channel, Cue, CueNumber, State};
 use eframe::egui::{self, Key, Modifiers};
 use egui_extras::{Column, TableBuilder};
 
@@ -100,6 +100,7 @@ pub enum CuesUiMode {
     EditDcaAssign {
         cue_ind: usize,
         dca_ind: usize,
+        is_kbd_editing: bool,
         original_dca_state: super::cues::DcaState,
     },
     EditCueDesc {
@@ -422,6 +423,7 @@ impl State {
             self.cues_begin_edit_action(CuesUiMode::EditDcaAssign {
                 cue_ind: i,
                 dca_ind: j,
+                is_kbd_editing: false,
                 original_dca_state: dca.clone(),
             });
         }
@@ -479,14 +481,23 @@ impl State {
                     });
             }
             CuesUiMode::EditDcaAssign {
-                cue_ind, dca_ind, ..
-            } => self.cues_ui_popup_dca_assign(ui, cue_ind, dca_ind),
+                cue_ind,
+                dca_ind,
+                is_kbd_editing,
+                ..
+            } => self.cues_ui_popup_dca_assign(ui, cue_ind, dca_ind, is_kbd_editing),
             CuesUiMode::EditCueDesc { .. } | CuesUiMode::RenumberCue { .. } => (), // Not a popup
         }
     }
-    /// Draw the _edit DCA assignment_ popup in the cues screen
+    /// Draw the edit DCA assignment popup in the cues screen
     // FIX: Refactor this function because it is too long and a mess
-    fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui, cue_ind: usize, dca_ind: usize) {
+    fn cues_ui_popup_dca_assign(
+        &mut self,
+        ui: &mut egui::Ui,
+        cue_ind: usize,
+        dca_ind: usize,
+        is_kbd_editing: bool,
+    ) {
         // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
         // of the function, we assign `copied_cue` back to the actual cue.
         if let Some(mut copied_cue) = self.cues().values().nth(cue_ind).cloned() {
@@ -528,6 +539,15 @@ impl State {
                             }
                         });
                     });
+                    // Keyboard editing helper
+                    if is_kbd_editing {
+                        ui.label("Editing assignment with keyboard; esc to end, shift to unassign; Q = 11, A = 21, Z = 31.");
+                    } else {
+                        ui.label(
+                            egui::RichText::new("Press ctrl-e to edit with keyboard")
+                                .color(egui::Color32::DARK_GRAY),
+                        );
+                    }
                     ui.add_space(10.0);
                     // DCA name edit
                     ui.horizontal(|ui| {
@@ -581,11 +601,50 @@ impl State {
                     }
                 });
 
+            // Do input (keyboard editing)
+            self.cues_ui_popup_dca_assign_input(ui, &mut copied_cue);
+
             let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
                 log::warn!("Unable to get cue at index {}", cue_ind);
                 return;
             };
             *actual_cue = copied_cue;
+        }
+    }
+    /// This handles the keyboard input for the dca assignment popup. It edits the assignment in the
+    /// provided cue. It gets input from the ui parameter, and it edits State to turn keyboard
+    /// editing on/off
+    fn cues_ui_popup_dca_assign_input(&mut self, ui: &mut egui::Ui, cue: &mut Cue) {
+        let num_channels = self.num_channels();
+        if let CuesUiMode::EditDcaAssign { dca_ind, is_kbd_editing, .. } = self.cues_ui_mode_mut() {
+            if !*is_kbd_editing {
+                // If not kbd editing (perhaps begin kbd editing)
+                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::E)) {
+                    *is_kbd_editing = true;
+                }
+            } else {
+                // If we are kbd editing...
+                // End kbd editing
+                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape)) {
+                    *is_kbd_editing = false;
+                }
+                // Assign/Unassign
+                // The helpers are very long, they just check each possible key and return if one
+                // was pressed
+                if let Some(unassign_num) = ch_number_unassign_input_helper(ui)
+                    && unassign_num <= num_channels
+                    && let Some(ch) = Channel::from_number(unassign_num)
+                {
+                    cue.dcas_mut()[*dca_ind].unassign(ch);
+                } else if let Some(assign_num) = ch_number_assign_input_helper(ui)
+                    && assign_num <= num_channels
+                    && let Some(ch) = Channel::from_number(assign_num)
+                {
+                    cue.dcas_mut()[*dca_ind].assign(ch);
+                }
+            }
+        } else {
+            log::error!("Erroneous call to cues_ui_popup_dca_assign_input");
         }
     }
 }
@@ -639,4 +698,181 @@ impl State {
             self.file_to_clipboard(ui);
         }
     }
+}
+
+fn ch_number_assign_input_helper(ui: &mut egui::Ui) -> Option<u8> {
+    let n =  Modifiers::NONE;
+    ui.ctx().input_mut(|i| {
+        if i.consume_key(n, Key::Num1) {
+            Some(1)
+        } else if i.consume_key(n, Key::Num2) {
+            Some(2)
+        } else if i.consume_key(n, Key::Num3) {
+            Some(3)
+        } else if i.consume_key(n, Key::Num4) {
+            Some(4)
+        } else if i.consume_key(n, Key::Num5) {
+            Some(5)
+        } else if i.consume_key(n, Key::Num6) {
+            Some(6)
+        } else if i.consume_key(n, Key::Num7) {
+            Some(7)
+        } else if i.consume_key(n, Key::Num8) {
+            Some(8)
+        } else if i.consume_key(n, Key::Num9) {
+            Some(9)
+        } else if i.consume_key(n, Key::Num0) {
+            Some(10)
+        } else if i.consume_key(n, Key::Q) {
+            Some(11)
+        } else if i.consume_key(n, Key::W) {
+            Some(12)
+        } else if i.consume_key(n, Key::E) {
+            Some(13)
+        } else if i.consume_key(n, Key::R) {
+            Some(14)
+        } else if i.consume_key(n, Key::T) {
+            Some(15)
+        } else if i.consume_key(n, Key::Y) {
+            Some(16)
+        } else if i.consume_key(n, Key::U) {
+            Some(17)
+        } else if i.consume_key(n, Key::I) {
+            Some(18)
+        } else if i.consume_key(n, Key::O) {
+            Some(19)
+        } else if i.consume_key(n, Key::P) {
+            Some(20)
+        } else if i.consume_key(n, Key::A) {
+            Some(21)
+        } else if i.consume_key(n, Key::S) {
+            Some(22)
+        } else if i.consume_key(n, Key::D) {
+            Some(23)
+        } else if i.consume_key(n, Key::F) {
+            Some(24)
+        } else if i.consume_key(n, Key::G) {
+            Some(25)
+        } else if i.consume_key(n, Key::H) {
+            Some(26)
+        } else if i.consume_key(n, Key::J) {
+            Some(27)
+        } else if i.consume_key(n, Key::K) {
+            Some(28)
+        } else if i.consume_key(n, Key::L) {
+            Some(29)
+        } else if i.consume_key(n, Key::Semicolon) {
+            Some(30)
+        } else if i.consume_key(n, Key::Z) {
+            Some(31)
+        } else if i.consume_key(n, Key::X) {
+            Some(32)
+        } else if i.consume_key(n, Key::C) {
+            Some(33)
+        } else if i.consume_key(n, Key::V) {
+            Some(34)
+        } else if i.consume_key(n, Key::B) {
+            Some(35)
+        } else if i.consume_key(n, Key::N) {
+            Some(36)
+        } else if i.consume_key(n, Key::M) {
+            Some(37)
+        } else if i.consume_key(n, Key::Comma) {
+            Some(38)
+        } else if i.consume_key(n, Key::Period) {
+            Some(39)
+        } else if i.consume_key(n, Key::Slash) {
+            Some(40)
+        } else {
+            None
+        }
+    })
+}
+fn ch_number_unassign_input_helper(ui: &mut egui::Ui) -> Option<u8> {
+    let s =  Modifiers::SHIFT;
+    ui.ctx().input_mut(|i| {
+        if i.consume_key(s, Key::Exclamationmark) {
+            Some(1)
+        } else if i.consume_key(s, Key::Num2) {
+            Some(2)
+        } else if i.consume_key(s, Key::Num3) {
+            Some(3)
+        } else if i.consume_key(s, Key::Num4) {
+            Some(4)
+        } else if i.consume_key(s, Key::Num5) {
+            Some(5)
+        } else if i.consume_key(s, Key::Num6) {
+            Some(6)
+        } else if i.consume_key(s, Key::Num7) {
+            Some(7)
+        } else if i.consume_key(s, Key::Num8) {
+            Some(8)
+        } else if i.consume_key(s, Key::Num9) {
+            Some(9)
+        } else if i.consume_key(s, Key::Num0) {
+            Some(10)
+        } else if i.consume_key(s, Key::Q) {
+            Some(11)
+        } else if i.consume_key(s, Key::W) {
+            Some(12)
+        } else if i.consume_key(s, Key::E) {
+            Some(13)
+        } else if i.consume_key(s, Key::R) {
+            Some(14)
+        } else if i.consume_key(s, Key::T) {
+            Some(15)
+        } else if i.consume_key(s, Key::Y) {
+            Some(16)
+        } else if i.consume_key(s, Key::U) {
+            Some(17)
+        } else if i.consume_key(s, Key::I) {
+            Some(18)
+        } else if i.consume_key(s, Key::O) {
+            Some(19)
+        } else if i.consume_key(s, Key::P) {
+            Some(20)
+        } else if i.consume_key(s, Key::A) {
+            Some(21)
+        } else if i.consume_key(s, Key::S) {
+            Some(22)
+        } else if i.consume_key(s, Key::D) {
+            Some(23)
+        } else if i.consume_key(s, Key::F) {
+            Some(24)
+        } else if i.consume_key(s, Key::G) {
+            Some(25)
+        } else if i.consume_key(s, Key::H) {
+            Some(26)
+        } else if i.consume_key(s, Key::J) {
+            Some(27)
+        } else if i.consume_key(s, Key::K) {
+            Some(28)
+        } else if i.consume_key(s, Key::L) {
+            Some(29)
+        } else if i.consume_key(s, Key::Semicolon) {
+            Some(30)
+        } else if i.consume_key(s, Key::Z) {
+            Some(31)
+        } else if i.consume_key(s, Key::X) {
+            Some(32)
+        } else if i.consume_key(s, Key::C) {
+            Some(33)
+        } else if i.consume_key(s, Key::V) {
+            Some(34)
+        } else if i.consume_key(s, Key::B) {
+            Some(35)
+        } else if i.consume_key(s, Key::N) {
+            Some(36)
+        } else if i.consume_key(s, Key::M) {
+            Some(37)
+        } else if i.consume_key(s, Key::Comma) {
+            Some(38)
+        } else if i.consume_key(s, Key::Period) {
+            Some(39)
+        } else if i.consume_key(s, Key::Slash) {
+            Some(40)
+        } else {
+            None
+        }
+    })
 }
