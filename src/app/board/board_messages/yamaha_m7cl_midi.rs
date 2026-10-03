@@ -214,10 +214,8 @@ fn send_channel_name(channel_ind: u8, name: &str) -> Vec<MidiMessage> {
 /// Send the sequence of midi messages which corresponds to the given NRPN control change
 /// Note: takes normal, not midi, bytes
 fn send_nrpn(param: u16, val: u16) -> Vec<MidiMessage> {
-    let param_msb = (param >> 8) as u8;
-    let param_lsb = param as u8;
-    let val_msb = (val >> 8) as u8;
-    let val_lsb = val as u8;
+    let (param_msb, param_lsb) = two_byte_midi_pack(param);
+    let (val_msb, val_lsb) = two_byte_midi_pack(val);
     vec![
         vec![
             // Control change + channel
@@ -310,4 +308,10 @@ fn recv_prm_sysex(content: &[u8]) -> Option<(u16, u16, u16, [u8; 5])> {
             (content[9+offset] as u16) << 8 | content[10+offset] as u16,
             content[11+offset..16+offset].try_into().expect("Slice should be the correct size on account of it being sliced right here with the correct size")
             ))
+}
+/// Pack the two given (8 bit) bytes lossily into two MIDI (7 bit) bytes
+fn two_byte_midi_pack(input: u16) -> (u8, u8) {
+    let lsb = input & 0b0111_1111;
+    let msb = (input >> 7) & 0b0111_1111;
+    (msb as u8, lsb as u8)
 }
