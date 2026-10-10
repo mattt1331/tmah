@@ -26,6 +26,7 @@ impl super::State {
                 cue_ind,
                 dca_ind,
                 is_kbd_editing: _,
+                ui_pan_edit_buffer: _,
                 ref original_dca_state,
             } => {
                 if let Some((_, cue)) = self.cues().iter().nth(cue_ind)
@@ -438,6 +439,12 @@ impl DcaState {
     pub fn level(&self) -> &Option<Decibels> {
         &self.level
     }
+    pub fn pan(&self) -> &Pan {
+        &self.pan
+    }
+    pub fn pan_mut(&mut self) -> &mut Pan {
+        &mut self.pan
+    }
     pub fn assigned(&self) -> &BTreeSet<Channel> {
         &self.assigned
     }
@@ -479,6 +486,9 @@ impl Pan {
     }
     pub fn value(&self) -> f32 {
         Self::normalize(self.value)
+    }
+    pub fn set_value(&mut self, value: f32) {
+        self.value = Self::normalize(value);
     }
 }
 impl PartialEq for Pan {

@@ -4,6 +4,7 @@ use super::board;
 use super::{Channel, Cue, CueNumber, State};
 use eframe::egui::{self, Key, Modifiers};
 use egui_extras::{Column, TableBuilder};
+use std::str::FromStr;
 
 /// The different screens of the ui, like the cues, board connection, etc
 #[derive(Default, PartialEq)]
@@ -101,6 +102,7 @@ pub enum CuesUiMode {
         cue_ind: usize,
         dca_ind: usize,
         is_kbd_editing: bool,
+        ui_pan_edit_buffer: String,
         original_dca_state: super::cues::DcaState,
     },
     EditCueDesc {
@@ -424,6 +426,7 @@ impl State {
                 cue_ind: i,
                 dca_ind: j,
                 is_kbd_editing: false,
+                ui_pan_edit_buffer: String::new(),
                 original_dca_state: dca.clone(),
             });
         }
@@ -480,135 +483,152 @@ impl State {
                             })
                     });
             }
-            CuesUiMode::EditDcaAssign {
-                cue_ind,
-                dca_ind,
-                is_kbd_editing,
-                ..
-            } => self.cues_ui_popup_dca_assign(ui, cue_ind, dca_ind, is_kbd_editing),
+            CuesUiMode::EditDcaAssign { .. } => self.cues_ui_popup_dca_assign(ui), 
             CuesUiMode::EditCueDesc { .. } | CuesUiMode::RenumberCue { .. } => (), // Not a popup
         }
     }
     /// Draw the edit DCA assignment popup in the cues screen
     // FIX: Refactor this function because it is too long and a mess
-    fn cues_ui_popup_dca_assign(
-        &mut self,
-        ui: &mut egui::Ui,
-        cue_ind: usize,
-        dca_ind: usize,
-        is_kbd_editing: bool,
-    ) {
-        // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
-        // of the function, we assign `copied_cue` back to the actual cue.
-        if let Some(mut copied_cue) = self.cues().values().nth(cue_ind).cloned() {
-            egui::Window::new("Edit DCA Assignments")
-                .title_bar(false)
-                .show(ui.ctx(), |ui| {
-                    let dca_name = copied_cue.dcas()[dca_ind].name(self.cues_ch_names());
-                    let dca_name = if !dca_name.is_empty() {
-                        dca_name
-                    } else {
-                        (dca_ind + 1).to_string()
-                    };
-                    // Header
-                    ui.horizontal(|ui| {
-                        // Heading
+    fn cues_ui_popup_dca_assign(&mut self, ui: &mut egui::Ui) {
+        if let CuesUiMode::EditDcaAssign {
+            cue_ind,
+            dca_ind,
+            is_kbd_editing,
+            ui_pan_edit_buffer,
+            ..
+        } = self.cues_ui_mode() {
+            // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
+            // of the function, we assign `copied_cue` back to the actual cue.
+            let cue_ind = *cue_ind;
+            let dca_ind = *dca_ind;
+            let is_kbd_editing = *is_kbd_editing;
+            let mut cloned_ui_pan_edit_buffer = ui_pan_edit_buffer.clone();
+            if let Some(mut copied_cue) = self.cues().values().nth(cue_ind).cloned() {
+                egui::Window::new("Edit DCA Assignments")
+                    .title_bar(false)
+                    .show(ui.ctx(), |ui| {
+                        let dca_name = copied_cue.dcas()[dca_ind].name(self.cues_ch_names());
+                        let dca_name = if !dca_name.is_empty() {
+                            dca_name
+                        } else {
+                            (dca_ind + 1).to_string()
+                        };
+                        // Header
                         ui.horizontal(|ui| {
-                            ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
+                            // Heading
+                            ui.horizontal(|ui| {
+                                ui.heading(format!("Cue {}: DCA {}", cue_ind + 1, dca_name));
+                            });
+                            // Copy/paste buttons
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                                if ui.button("Paste").clicked()
+                                    || !ui.ctx().egui_wants_keyboard_input()
+                                        && ui.ctx().input_mut(|input| {
+                                            input.consume_key(Modifiers::COMMAND, Key::P)
+                                        })
+                                {
+                                    if let Some(pasted_dca) = self.cues_copied_dca().clone() {
+                                        copied_cue.dcas_mut()[dca_ind] = pasted_dca;
+                                    }
+                                }
+                                if ui.button("Copy").clicked()
+                                    || !ui.ctx().egui_wants_keyboard_input()
+                                        && ui.ctx().input_mut(|input| {
+                                            input.consume_key(Modifiers::COMMAND, Key::Y)
+                                        })
+                                {
+                                    *self.cues_copied_dca_mut() =
+                                        Some(copied_cue.dcas()[dca_ind].clone());
+                                }
+                            });
                         });
-                        // Copy/paste buttons
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                            if ui.button("Paste").clicked()
-                                || !ui.ctx().egui_wants_keyboard_input()
-                                    && ui.ctx().input_mut(|input| {
-                                        input.consume_key(Modifiers::COMMAND, Key::P)
-                                    })
-                            {
-                                if let Some(pasted_dca) = self.cues_copied_dca().clone() {
-                                    copied_cue.dcas_mut()[dca_ind] = pasted_dca;
+                        // Keyboard editing helper
+                        if is_kbd_editing {
+                            ui.label("Editing assignment with keyboard; esc to end, shift to unassign; Q = 11, A = 21, Z = 31.");
+                        } else {
+                            ui.label(
+                                egui::RichText::new("Press ctrl-e to edit with keyboard")
+                                    .color(egui::Color32::DARK_GRAY),
+                            );
+                        }
+                        ui.add_space(10.0);
+                        // DCA name edit
+                        ui.horizontal(|ui| {
+                            ui.label("Name:");
+                            let dca_name = copied_cue.dcas_mut()[dca_ind].edit_name();
+                            if let Some(name) = dca_name {
+                                ui.text_edit_singleline(name);
+                                if name.is_empty() {
+                                    *dca_name = None;
+                                }
+                            } else {
+                                let mut name = "".to_string();
+                                ui.text_edit_singleline(&mut name);
+                                if !name.is_empty() {
+                                    *dca_name = Some(name);
                                 }
                             }
-                            if ui.button("Copy").clicked()
-                                || !ui.ctx().egui_wants_keyboard_input()
-                                    && ui.ctx().input_mut(|input| {
-                                        input.consume_key(Modifiers::COMMAND, Key::Y)
-                                    })
-                            {
-                                *self.cues_copied_dca_mut() =
-                                    Some(copied_cue.dcas()[dca_ind].clone());
+                        });
+                        // Pan edit
+                        ui.horizontal(|ui| {
+                            ui.label("Pan, range [-1.0, 1.0]:");
+                            if cloned_ui_pan_edit_buffer.is_empty() {
+                                cloned_ui_pan_edit_buffer = copied_cue.dcas()[dca_ind].pan().value().to_string();
+                            }
+                            if ui.text_edit_singleline(&mut cloned_ui_pan_edit_buffer).lost_focus() {
+                                if let Ok(pan_value) = f32::from_str(&cloned_ui_pan_edit_buffer) {
+                                    copied_cue.dcas_mut()[dca_ind].pan_mut().set_value(pan_value);
+                                }
+                                cloned_ui_pan_edit_buffer = copied_cue.dcas()[dca_ind].pan().value().to_string();
                             }
                         });
-                    });
-                    // Keyboard editing helper
-                    if is_kbd_editing {
-                        ui.label("Editing assignment with keyboard; esc to end, shift to unassign; Q = 11, A = 21, Z = 31.");
-                    } else {
-                        ui.label(
-                            egui::RichText::new("Press ctrl-e to edit with keyboard")
-                                .color(egui::Color32::DARK_GRAY),
-                        );
-                    }
-                    ui.add_space(10.0);
-                    // DCA name edit
-                    ui.horizontal(|ui| {
-                        ui.label("Name:");
-                        let dca_name = copied_cue.dcas_mut()[dca_ind].edit_name();
-                        if let Some(name) = dca_name {
-                            ui.text_edit_singleline(name);
-                            if name.is_empty() {
-                                *dca_name = None;
-                            }
-                        } else {
-                            let mut name = "".to_string();
-                            ui.text_edit_singleline(&mut name);
-                            if !name.is_empty() {
-                                *dca_name = Some(name);
-                            }
+                        ui.add_space(10.0);
+                        // Channel assignments
+                        let num_channels = self.num_channels();
+                        let mut assigned: Vec<bool> = vec![false; num_channels.into()];
+                        for ch in copied_cue.dcas()[dca_ind].assigned() {
+                            assigned[ch.index() as usize] = true;
                         }
-                    });
-                    ui.add_space(10.0);
-                    // Channel assignments
-                    let num_channels = self.num_channels();
-                    let mut assigned: Vec<bool> = vec![false; num_channels.into()];
-                    for ch in copied_cue.dcas()[dca_ind].assigned() {
-                        assigned[ch.index() as usize] = true;
-                    }
-                    let assigned_pre = assigned.clone();
-                    for i in 0..num_channels {
-                        let ch_name = self
-                            .cues_ch_names()
-                            .get_name(&Channel::from_index(i))
-                            .unwrap_or_else(|| format!("Channel {}", i + 1));
-                        let ch_name = if !ch_name.is_empty() {
-                            ch_name
-                        } else {
-                            format!("Channel {}", i + 1)
-                        };
-                        ui.checkbox(&mut assigned[i as usize], ch_name);
-                    }
-                    for (ch_ind, (pre, post)) in
-                        assigned_pre.iter().zip(assigned.iter()).enumerate()
-                    {
-                        if pre != post {
-                            if *post {
-                                copied_cue.dcas_mut()[dca_ind]
-                                    .assign(Channel::from_index(ch_ind as u8))
+                        let assigned_pre = assigned.clone();
+                        for i in 0..num_channels {
+                            let ch_name = self
+                                .cues_ch_names()
+                                .get_name(&Channel::from_index(i))
+                                .unwrap_or_else(|| format!("Channel {}", i + 1));
+                            let ch_name = if !ch_name.is_empty() {
+                                ch_name
                             } else {
-                                copied_cue.dcas_mut()[dca_ind]
-                                    .unassign(Channel::from_index(ch_ind as u8))
+                                format!("Channel {}", i + 1)
+                            };
+                            ui.checkbox(&mut assigned[i as usize], ch_name);
+                        }
+                        for (ch_ind, (pre, post)) in
+                            assigned_pre.iter().zip(assigned.iter()).enumerate()
+                        {
+                            if pre != post {
+                                if *post {
+                                    copied_cue.dcas_mut()[dca_ind]
+                                        .assign(Channel::from_index(ch_ind as u8))
+                                } else {
+                                    copied_cue.dcas_mut()[dca_ind]
+                                        .unassign(Channel::from_index(ch_ind as u8))
+                                }
                             }
                         }
-                    }
-                });
+                    });
 
-            // Do input (keyboard editing)
-            self.cues_ui_popup_dca_assign_input(ui, &mut copied_cue);
+                // Do input (keyboard editing)
+                self.cues_ui_popup_dca_assign_input(ui, &mut copied_cue);
 
-            let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
-                log::warn!("Unable to get cue at index {}", cue_ind);
-                return;
-            };
-            *actual_cue = copied_cue;
+                let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
+                    log::warn!("Unable to get cue at index {}", cue_ind);
+                    return;
+                };
+                *actual_cue = copied_cue;
+                if let CuesUiMode::EditDcaAssign { ui_pan_edit_buffer, ..} = self.cues_ui_mode_mut() {
+                    *ui_pan_edit_buffer = cloned_ui_pan_edit_buffer;
+                }
+            }
         }
     }
     /// This handles the keyboard input for the dca assignment popup. It edits the assignment in the
