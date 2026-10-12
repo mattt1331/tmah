@@ -461,44 +461,6 @@ impl DcaState {
     }
 }
 
-/// A channel's pan value, as a float from -1.0 to 1.0, where -1.0 is all the way left and 1.0 is
-/// all the way right.
-/// The pan value is stored as an `f32`. The infinities are clamped, and NaN is treated as
-/// zero.
-#[derive(Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
-pub struct Pan {
-    value: f32,
-}
-
-impl Pan {
-    /// Take the provided value and transform it to be valid and in the range [-1.0, 1.0].
-    fn normalize(input: f32) -> f32 {
-        use std::num::FpCategory;
-
-        match input.classify() {
-            FpCategory::Zero => input,
-            FpCategory::Normal | FpCategory::Subnormal | FpCategory::Infinite => input.clamp(-1.0, 1.0),
-            FpCategory::Nan => 0.0,
-        }
-    }
-    pub fn new(value: f32) -> Self {
-        Pan { value: Self::normalize(value) }
-    }
-    pub fn value(&self) -> f32 {
-        Self::normalize(self.value)
-    }
-    pub fn set_value(&mut self, value: f32) {
-        self.value = Self::normalize(value);
-    }
-}
-impl PartialEq for Pan {
-    fn eq(&self, other: &Self) -> bool {
-        // Ensure that eg a Pan with value NaN and a pan with value 0.0 are equal
-        self.value() == other.value()
-    }
-}
-impl Eq for Pan {}
-
 /// Contains the names of each channel
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ChannelNames {

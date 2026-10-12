@@ -2,7 +2,7 @@
 //! smallest number of messages needed to reach a desired state
 
 use super::super::{ChannelNames, Cue};
-use super::{BoardEdit, Channel, Dca};
+use super::{BoardEdit, Channel, Dca, Pan};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The data structure which holds the board's known state. This is probably not very efficient
@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct BoardStateCache {
     channel_mute: BTreeMap<Channel, bool>,
     dca_assignments: BTreeMap<Dca, BTreeSet<Channel>>,
+    channel_pan: BTreeMap<Channel, Pan>,
     dca_names: BTreeMap<Dca, String>,
 }
 
@@ -36,6 +37,9 @@ impl BoardStateCache {
                         .or_default()
                         .remove(ch);
                 }
+            }
+            BoardEdit::ChannelPan(ch, pan) => {
+                self.channel_pan.insert(ch.clone(), *pan);
             }
             BoardEdit::DcaName(dca, name) => {
                 self.dca_names.insert(dca.clone(), name.clone());
@@ -173,6 +177,26 @@ impl BoardStateCache {
         out.append(&mut channel_unassigns);
         out
     }
+    /// Generate a list of edits that need to be made in order to bring the channel pans in line
+    /// with what is specified in the cue.
+    fn cue_diff_pan(&self, cue: &Cue, num_channels: u8, num_dcas: u8) -> Vec<BoardEdit> {
+        let mut edits: Vec<BoardEdit> = Vec::new();
+        for (dca_ind, dca) in cue.dcas().iter().enumerate() {
+            let new_pan = dca.pan();
+            if dca_ind >= num_dcas.into() { continue; }
+            for ch in dca.assigned() {
+                if ch.number() > num_channels { continue; }
+                if let Some(current_pan) = self.channel_pan.get(&ch)
+                    && current_pan == new_pan {
+                        // We know the current pan and it is what we want it to be, no further
+                        // action needed
+                } else {
+                    edits.push(BoardEdit::ChannelPan(ch.clone(), *new_pan));
+                }
+            }
+        }
+        edits
+    }
     /// Generate a list of edits that need to be made in order to bring the state of the board in
     /// line with what is specified in the cue. Some things which are not cached will always be
     /// sent.
@@ -184,6 +208,8 @@ impl BoardStateCache {
         num_dcas: u8,
     ) -> Vec<BoardEdit> {
         let mute_and_assign = self.cue_diff_core(cue, num_channels, num_dcas);
+        // Channel pans
+        let mut channel_pans = self.cue_diff_pan(cue, num_channels, num_dcas);
         // DCA levels
         let mut dca_levels: Vec<BoardEdit> = Vec::new();
         for (dca_ind, new_dca) in cue.dcas().iter().enumerate() {
@@ -216,6 +242,7 @@ impl BoardStateCache {
         }
 
         let mut out = mute_and_assign;
+        out.append(&mut channel_pans);
         out.append(&mut dca_levels);
         out.append(&mut dca_names);
         out

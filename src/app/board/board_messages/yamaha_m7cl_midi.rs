@@ -52,6 +52,8 @@ impl BoardEditAdaptor for YamahaM7CLMidi {
             BoardEdit::ChannelName(ch, name) => {
                 Ok(send_channel_name(ch.index(), &name).into_iter())
             }
+            // FIXME: implement pan right now
+            BoardEdit::ChannelPan(_ch, _pan) => todo!(),
             BoardEdit::DcaLevel(_dca, _level) => todo!(),
             BoardEdit::DcaName(dca, name) => Ok(send_dca_name(dca.index(), &name).into_iter()),
         }

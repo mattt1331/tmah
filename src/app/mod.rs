@@ -6,7 +6,7 @@ mod file;
 mod ui;
 
 use board::Channel;
-pub use board::Decibels;
+pub use board::{Decibels, Pan};
 pub use cues::{ChannelNames, Cue, CueNumber, CuesData, CuesEditAction, DcaState};
 
 use std::collections::{BTreeMap, BTreeSet};

@@ -16,7 +16,7 @@
 
 // Types used by this module to represent data common to all boards
 mod data;
-pub use data::{BoardEdit, Channel, Dca, Decibels};
+pub use data::{BoardEdit, Channel, Dca, Decibels, Pan};
 // Library of `BoardEdit` to message and vice versa (low level api)
 mod board_messages;
 // System for tracking the state of the board
