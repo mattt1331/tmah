@@ -6,7 +6,7 @@
 //! SYSEX). Consequently, in order to avoid having two streams of duplicate messages being sent at
 //! us, we receive everything via SYSEX.
 
-use super::super::{Channel, Dca};
+use super::super::{Channel, Dca, Pan};
 use super::util_midi::MidiMessage as ParsedMidiMessage;
 use super::{BoardEdit, BoardEditAdaptor};
 
@@ -52,8 +52,7 @@ impl BoardEditAdaptor for YamahaM7CLMidi {
             BoardEdit::ChannelName(ch, name) => {
                 Ok(send_channel_name(ch.index(), &name).into_iter())
             }
-            // FIXME: implement pan right now
-            BoardEdit::ChannelPan(_ch, _pan) => todo!(),
+            BoardEdit::ChannelPan(ch, pan) => Ok(send_ch_pan(ch.index(), pan).into_iter()),
             BoardEdit::DcaLevel(_dca, _level) => todo!(),
             BoardEdit::DcaName(dca, name) => Ok(send_dca_name(dca.index(), &name).into_iter()),
         }
@@ -152,6 +151,15 @@ fn send_ch_on(ch_ind: u8, on: bool) -> Vec<MidiMessage> {
         0b0000_0000_0000_0000
     };
     send_nrpn(0x05b6 + (ch_ind as u16), val)
+}
+/// Send the messages to set the pan of the given channel
+fn send_ch_pan(ch_ind: u8, pan: Pan) -> Vec<MidiMessage> {
+    let param: u16 = 0x2096 + ch_ind as u16;
+    // The M7CL wants the pan as an integer in [-63, 63]. I assume this is meant to be represented
+    // as an eight-bit two's complement integer (`i8`).
+    let value = ((63.0 * pan.value()) as i8).clamp(-63, 63) as u8;
+    let value = value as u16;
+    send_nrpn(param, value)
 }
 /// Send the messages to assign/unassign the given channel from the given dca
 fn send_ch_dca(ch_ind: u8, dca_ind: u8, assigned: bool) -> Vec<MidiMessage> {
