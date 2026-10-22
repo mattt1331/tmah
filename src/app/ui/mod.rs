@@ -231,7 +231,7 @@ impl State {
             .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Space))
             && matches!(self.cues_ui_mode(), CuesUiMode::None)
         {
-            self.fire_next_cue();
+            self.fire_selected_and_increment();
         }
         // Escape to kill popups
         let ctx = ui.ctx();
@@ -274,11 +274,19 @@ impl State {
             })
             .body(|body| {
                 body.rows(ROW_HEIGHT, self.cues().len(), |mut row| {
-                    row.set_hovered(false); // Otherwise it does an ugly highlight when you mouse over
                     let i = row.index();
                     // Draw highlight if selected row
                     if let Some(sel_ind) = self.cues_selected_cue()
                         && sel_ind == i
+                    {
+                        row.set_hovered(true);
+                    } else {
+                        // Otherwise it hovers on mouseover
+                        row.set_hovered(false);
+                    }
+                    // Draw highlight if this is the last fired cue
+                    if let Some(last_fired_ind) = self.cues_last_fired_cue()
+                        && last_fired_ind == i
                     {
                         row.set_selected(true);
                     }
@@ -290,12 +298,11 @@ impl State {
                     // DCAs
                     self.cues_table_dcas(&mut row);
 
-                    // Select row and fire cue if clicked (edit) or if double clicked (show)
+                    // Select row if clicked (edit) or if double clicked (show)
                     if (self.cues_is_editing() && row.response().clicked())
                         || row.response().double_clicked()
                     {
                         self.cues_set_selected(Some(i));
-                        self.fire_selected_cue();
                     }
                 })
             });
@@ -698,6 +705,7 @@ impl State {
             if new_cue_ind < self.num_cues() && new_dca_ind < self.num_dcas().into() {
                 self.cues_begin_edit_dca_assign(new_cue_ind, new_dca_ind);
             }
+            self.cues_set_selected(Some(new_cue_ind));
         }
     }
 }

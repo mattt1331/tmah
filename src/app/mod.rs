@@ -21,6 +21,7 @@ pub struct State {
     cues_ui_mode: ui::CuesUiMode,
     cues_ui_safety: ui::CuesUiSafety,
     cues_selected_cue_ind: Option<usize>,
+    cues_last_fired_cue_ind: Option<usize>,
     cues_copied_dca: Option<DcaState>,
     cues_copied_cue: Option<Cue>,
     // FIXME: Refactor this atrocity.
@@ -53,6 +54,7 @@ impl Default for State {
             cues_ui_mode: ui::CuesUiMode::default(),
             cues_ui_safety: ui::CuesUiSafety::default(),
             cues_selected_cue_ind: None,
+            cues_last_fired_cue_ind: None,
             cues_copied_dca: None,
             cues_copied_cue: None,
             cues_action_stack: Vec::default(),
@@ -110,6 +112,9 @@ impl State {
     pub fn cues_selected_cue(&self) -> Option<usize> {
         self.cues_selected_cue_ind
     }
+    pub fn cues_last_fired_cue(&self) -> Option<usize> {
+        self.cues_last_fired_cue_ind
+    }
     pub fn cues_copied_dca(&self) -> &Option<DcaState> {
         &self.cues_copied_dca
     }
@@ -129,7 +134,7 @@ impl State {
 /// Methods with additional logic
 impl State {
     /// The key for eframe's persistent storage where we will autosave the file to
-    const PERSISTENT_STORAGE_KEY: &str = "miq_v2.file_data";
+    const PERSISTENT_STORAGE_KEY: &str = "tmah.file_data";
     /// Create a new `State` and load any persisted values
     pub fn new(cc: &eframe::CreationContext) -> Self {
         let mut out = Self::default();
@@ -152,10 +157,9 @@ impl State {
     pub fn fire_selected_cue(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
             if let Some(cue) = self.cues().values().nth(ind) {
-                // FIX: There has to be a better way to do this. Maybe switch to selected cue
-                // number, not index?
                 let cue = cue.clone();
                 self.board_connection.fire_cue(&cue);
+                self.cues_last_fired_cue_ind = Some(ind);
             } else {
                 log::error!(
                     "Fire cue function called but the selected cue at index {ind} could not be found"
@@ -164,13 +168,12 @@ impl State {
         }
     }
     /// Increments selection index and fires the newly selected cue.
-    pub fn fire_next_cue(&mut self) {
+    pub fn fire_selected_and_increment(&mut self) {
         if let Some(ind) = self.cues_selected_cue_ind {
-            self.cues_set_selected(Some(ind + 1));
             self.fire_selected_cue();
+            self.cues_set_selected(Some(ind + 1));
         } else {
             self.cues_set_selected(Some(0));
-            self.fire_selected_cue();
         }
     }
     /// Sends the channel names to the board.
