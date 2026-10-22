@@ -420,15 +420,9 @@ impl State {
         // If editing and a DCA was double clicked, edit its assignment
         if self.cues_is_editing()
             && let Some((i, j)) = double_clicked_cell
-            && let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j])
+            //&& let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j])
         {
-            self.cues_begin_edit_action(CuesUiMode::EditDcaAssign {
-                cue_ind: i,
-                dca_ind: j,
-                is_kbd_editing: false,
-                ui_pan_edit_buffer: String::new(),
-                original_dca_state: dca.clone(),
-            });
+            self.cues_begin_edit_dca_assign(i, j)
         }
     }
     /// Draw the popup, if any, in the cues screen
@@ -636,11 +630,27 @@ impl State {
     /// editing on/off
     fn cues_ui_popup_dca_assign_input(&mut self, ui: &mut egui::Ui, cue: &mut Cue) {
         let num_channels = self.num_channels();
-        if let CuesUiMode::EditDcaAssign { dca_ind, is_kbd_editing, .. } = self.cues_ui_mode_mut() {
+        let num_dcas = self.num_dcas();
+        // If we hjkl to a new cue/dca, which one? (cue_ind, dca_ind)
+        let mut new_edit_location: Option<(usize, usize)> = None;
+        if let CuesUiMode::EditDcaAssign { cue_ind, dca_ind, is_kbd_editing, .. } = self.cues_ui_mode_mut() {
             if !*is_kbd_editing {
-                // If not kbd editing (perhaps begin kbd editing)
+                // If not kbd editing
+                // Begin kbd editing
                 if ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::E)) {
                     *is_kbd_editing = true;
+                }
+                // Move to previous DCA
+                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::H)) {
+                    if *dca_ind > 0 {
+                        new_edit_location = Some((*cue_ind, *dca_ind - 1));
+                    }
+                }
+                // Move to next DCA
+                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::L)) {
+                    if *dca_ind < (num_dcas - 1).into() {
+                        new_edit_location = Some((*cue_ind, *dca_ind + 1));
+                    }
                 }
             } else {
                 // If we are kbd editing...
@@ -665,6 +675,10 @@ impl State {
             }
         } else {
             log::error!("Erroneous call to cues_ui_popup_dca_assign_input");
+        }
+        // If we chose to move to a different dca
+        if let Some((new_cue_ind, new_dca_ind)) = new_edit_location {
+            self.cues_begin_edit_dca_assign(new_cue_ind, new_dca_ind);
         }
     }
 }
