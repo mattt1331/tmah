@@ -215,6 +215,7 @@ impl State {
     fn cues_input(&mut self, ui: &mut egui::Ui) {
         // If del key pressed, delete selected cue (with safety)
         if self.cues_is_editing()
+            && !ui.ctx().egui_wants_keyboard_input()
             && ui
                 .ctx()
                 .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Delete))
@@ -420,7 +421,6 @@ impl State {
         // If editing and a DCA was double clicked, edit its assignment
         if self.cues_is_editing()
             && let Some((i, j)) = double_clicked_cell
-            //&& let Some(dca) = self.cues().values().nth(i).map(|cue| &cue.dcas()[j])
         {
             self.cues_begin_edit_dca_assign(i, j)
         }
@@ -633,6 +633,8 @@ impl State {
         let num_dcas = self.num_dcas();
         // If we hjkl to a new cue/dca, which one? (cue_ind, dca_ind)
         let mut new_edit_location: Option<(usize, usize)> = None;
+        // Guard against triggering while editing text
+        if ui.ctx().egui_wants_keyboard_input() { return; }
         if let CuesUiMode::EditDcaAssign { cue_ind, dca_ind, is_kbd_editing, .. } = self.cues_ui_mode_mut() {
             if !*is_kbd_editing {
                 // If not kbd editing
