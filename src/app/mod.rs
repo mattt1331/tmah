@@ -83,6 +83,9 @@ impl State {
     pub fn cues_mut(&mut self) -> &mut BTreeMap<CueNumber, Cue> {
         self.cues_data.cues_mut()
     }
+    pub fn num_cues(&self) -> usize {
+        self.cues_data.cues().len()
+    }
     pub fn cues_ch_names(&self) -> &ChannelNames {
         self.cues_data.ch_names()
     }

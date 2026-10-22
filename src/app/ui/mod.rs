@@ -654,6 +654,16 @@ impl State {
                         new_edit_location = Some((*cue_ind, *dca_ind + 1));
                     }
                 }
+                // Move up a cue
+                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::K)) {
+                    if *cue_ind > 0 {
+                        new_edit_location = Some((*cue_ind - 1, *dca_ind));
+                    }
+                }
+                // Move down a cue. If we are at the bottom, paste (implemented below).
+                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::J)) {
+                    new_edit_location = Some((*cue_ind + 1, *dca_ind));
+                }
             } else {
                 // If we are kbd editing...
                 // End kbd editing
@@ -680,7 +690,14 @@ impl State {
         }
         // If we chose to move to a different dca
         if let Some((new_cue_ind, new_dca_ind)) = new_edit_location {
-            self.cues_begin_edit_dca_assign(new_cue_ind, new_dca_ind);
+            // If we are at the bottom and want to paste a new cue
+            if new_cue_ind == self.num_cues() {
+                let new_cue = self.cues_copied_cue.clone().unwrap_or_default();
+                self.cues_insert_cue_bottom(new_cue);
+            }
+            if new_cue_ind < self.num_cues() && new_dca_ind < self.num_dcas().into() {
+                self.cues_begin_edit_dca_assign(new_cue_ind, new_dca_ind);
+            }
         }
     }
 }
