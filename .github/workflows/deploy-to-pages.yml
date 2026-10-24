@@ -1,0 +1,48 @@
+name: deploy-to-pages
+on:
+  push:
+    branches:
+      - prod-pages
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: jutli/trunk-action@v0.5.1
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build files
+        env:
+          TRUNK_BUILD_RELEASE: true
+        run: trunk build
+
+      - name: Upload built files
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to pages
+        id: deployment
+        uses: actions/deploy-pages@v4
