@@ -53,7 +53,7 @@ impl BoardEditAdaptor for YamahaM7CLMidi {
                 Ok(send_channel_name(ch.index(), &name).into_iter())
             }
             BoardEdit::ChannelPan(ch, pan) => Ok(send_ch_pan(ch.index(), pan).into_iter()),
-            BoardEdit::DcaLevel(_dca, _level) => todo!(),
+            BoardEdit::DcaLevel(dca, level) => Ok(send_dca_fader(dca.index(), level).into_iter()),
             BoardEdit::DcaName(dca, name) => Ok(send_dca_name(dca.index(), &name).into_iter()),
         }
     }
@@ -195,6 +195,15 @@ fn send_dca_name(dca_ind: u8, name: &str) -> Vec<MidiMessage> {
         // kDCAName kNameShort2
         send_prm_sysex(0x007b, 0x0001, dca_ind.into(), data_2),
     ]
+}
+/// Send the messages to turn on/off the given channel
+fn send_dca_fader(dca_ind: u8, fader_value: f32) -> Vec<MidiMessage> {
+    match fader_value_to_index(fader_value) {
+        Ok(val) => send_nrpn(0x3a4e + (dca_ind as u16), val as u16),
+        // Silently fail if invalid fader value
+        Err(()) => vec![],
+    }
+    
 }
 /// Send the messages to set the name of the given channel to the given value. The name must be
 /// ASCII and can be at most eight characters.
@@ -346,7 +355,7 @@ fn fader_value_to_index(value: f32) -> Result<usize, ()> {
         _ => (),
     }
     // static upper loop bound
-    for i in (0..FADER_TABLE.len()) {
+    for _i in 0..FADER_TABLE.len() {
         let search_ind = lower_bound + (upper_bound - lower_bound)/2;
         if value > FADER_TABLE[search_ind] {
             lower_bound = search_ind;
