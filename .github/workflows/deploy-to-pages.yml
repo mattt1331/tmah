@@ -20,6 +20,9 @@ jobs:
 
       - uses: jetli/trunk-action@v0.5.1
 
+      - name: Install wasm target
+        run: rustup target add wasm32-unknown-unknown
+
       - name: Build files
         env:
           TRUNK_BUILD_RELEASE: true
