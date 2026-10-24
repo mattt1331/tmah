@@ -326,8 +326,48 @@ fn two_byte_midi_pack(input: u16) -> (u8, u8) {
     (msb as u8, lsb as u8)
 }
 
+/// Round the provided fader value to the closest discrete value that the M7CL can store and return
+/// its index in PRM TABLE #03.
+fn fader_value_to_index(value: f32) -> Result<usize, ()> {
+    // we have binary search at home
+    let mut lower_bound = 0;
+    let mut upper_bound = FADER_TABLE.len() - 1;
+    // Guard against brokenness
+    match value.classify() {
+        std::num::FpCategory::Nan => return Err(()),
+        std::num::FpCategory::Infinite => {
+            if value.is_sign_negative() {
+                return Ok(lower_bound);
+            } else {
+                return Ok(upper_bound);
+            }
+        }
+        // Proceed to search
+        _ => (),
+    }
+    // static upper loop bound
+    for i in (0..FADER_TABLE.len()) {
+        let search_ind = lower_bound + (upper_bound - lower_bound)/2;
+        if value > FADER_TABLE[search_ind] {
+            lower_bound = search_ind;
+        } else {
+            upper_bound = search_ind;
+        }
+        if upper_bound - lower_bound == 1 {
+            break;
+        }
+    }
+    let lower_diff = (value - FADER_TABLE[lower_bound]).abs();
+    let upper_diff = (value - FADER_TABLE[upper_bound]).abs();
+    if lower_diff > upper_diff {
+        Ok(upper_bound)
+    } else {
+        Ok(lower_bound)
+    }
+}
+
 /// The M7CL stores fader values internally using a number in [0, 1023] (ie discretely with 1024
-/// steps). This is a map of table index to fader value.
+/// steps). This is a map of table index to fader value. (PRM TABLE #03)
 const FADER_TABLE: [f32; 1024] = [
     // Technically, this first value is -inf but for algorithm convenience it'll be this in our
     // table
@@ -413,3 +453,22 @@ const FADER_TABLE: [f32; 1024] = [
     9.15, 9.20, 9.25, 9.30, 9.35, 9.40, 9.45, 9.50, 9.55, 9.60, 9.65, 9.70, 9.75, 9.80, 9.85, 9.90,
     9.95, 10.00,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_fader_value_to_index() {
+        assert_eq!(fader_value_to_index(f32::NEG_INFINITY).unwrap(), 0);
+        assert_eq!(fader_value_to_index(f32::INFINITY).unwrap(), 1023);
+        assert_eq!(fader_value_to_index(-138.0).unwrap(), 1);
+        assert_eq!(fader_value_to_index(-138.1).unwrap(), 1);
+        assert_eq!(fader_value_to_index(-137.9).unwrap(), 1);
+        assert_eq!(fader_value_to_index(0.0).unwrap(), 823);
+        assert_eq!(fader_value_to_index(-29.7).unwrap(), 326);
+        assert_eq!(fader_value_to_index(-5.0).unwrap(), 723);
+        assert_eq!(fader_value_to_index(-5.005).unwrap(), 723);
+        assert_eq!(fader_value_to_index(-4.95).unwrap(), 724);
+        assert_eq!(fader_value_to_index(-10.0).unwrap(), 623);
+    }
+}

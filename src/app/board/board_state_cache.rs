@@ -281,7 +281,7 @@ mod tests {
     /// Returns a `Cue` with the given DCAs
     fn cue_with_dcas(dcas: Vec<DcaState>) -> Cue {
         let mut cue = Cue::default();
-        cue.dcas = dcas;
+        *cue.dcas_mut() = dcas;
         cue
     }
     impl BoardStateCache {
