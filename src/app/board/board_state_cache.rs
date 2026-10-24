@@ -183,13 +183,18 @@ impl BoardStateCache {
         let mut edits: Vec<BoardEdit> = Vec::new();
         for (dca_ind, dca) in cue.dcas().iter().enumerate() {
             let new_pan = dca.pan();
-            if dca_ind >= num_dcas.into() { continue; }
+            if dca_ind >= num_dcas.into() {
+                continue;
+            }
             for ch in dca.assigned() {
-                if ch.number() > num_channels { continue; }
+                if ch.number() > num_channels {
+                    continue;
+                }
                 if let Some(current_pan) = self.channel_pan.get(&ch)
-                    && current_pan == new_pan {
-                        // We know the current pan and it is what we want it to be, no further
-                        // action needed
+                    && current_pan == new_pan
+                {
+                    // We know the current pan and it is what we want it to be, no further
+                    // action needed
                 } else {
                     edits.push(BoardEdit::ChannelPan(ch.clone(), *new_pan));
                 }

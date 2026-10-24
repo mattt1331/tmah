@@ -484,7 +484,7 @@ impl State {
                             })
                     });
             }
-            CuesUiMode::EditDcaAssign { .. } => self.cues_ui_popup_dca_assign(ui), 
+            CuesUiMode::EditDcaAssign { .. } => self.cues_ui_popup_dca_assign(ui),
             CuesUiMode::EditCueDesc { .. } | CuesUiMode::RenumberCue { .. } => (), // Not a popup
         }
     }
@@ -497,7 +497,8 @@ impl State {
             is_kbd_editing,
             ui_pan_edit_buffer,
             ..
-        } = self.cues_ui_mode() {
+        } = self.cues_ui_mode()
+        {
             // Here, we copy the cue and also the indices to satisfy the borrow checker. At the bottom
             // of the function, we assign `copied_cue` back to the actual cue.
             let cue_ind = *cue_ind;
@@ -626,7 +627,10 @@ impl State {
                     return;
                 };
                 *actual_cue = copied_cue;
-                if let CuesUiMode::EditDcaAssign { ui_pan_edit_buffer, ..} = self.cues_ui_mode_mut() {
+                if let CuesUiMode::EditDcaAssign {
+                    ui_pan_edit_buffer, ..
+                } = self.cues_ui_mode_mut()
+                {
                     *ui_pan_edit_buffer = cloned_ui_pan_edit_buffer;
                 }
             }
@@ -641,40 +645,66 @@ impl State {
         // If we hjkl to a new cue/dca, which one? (cue_ind, dca_ind)
         let mut new_edit_location: Option<(usize, usize)> = None;
         // Guard against triggering while editing text
-        if ui.ctx().egui_wants_keyboard_input() { return; }
-        if let CuesUiMode::EditDcaAssign { cue_ind, dca_ind, is_kbd_editing, .. } = self.cues_ui_mode_mut() {
+        if ui.ctx().egui_wants_keyboard_input() {
+            return;
+        }
+        if let CuesUiMode::EditDcaAssign {
+            cue_ind,
+            dca_ind,
+            is_kbd_editing,
+            ..
+        } = self.cues_ui_mode_mut()
+        {
             if !*is_kbd_editing {
                 // If not kbd editing
                 // Begin kbd editing
-                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::E)) {
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::E))
+                {
                     *is_kbd_editing = true;
                 }
                 // Move to previous DCA
-                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::H)) {
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::H))
+                {
                     if *dca_ind > 0 {
                         new_edit_location = Some((*cue_ind, *dca_ind - 1));
                     }
                 }
                 // Move to next DCA
-                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::L)) {
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::L))
+                {
                     if *dca_ind < (num_dcas - 1).into() {
                         new_edit_location = Some((*cue_ind, *dca_ind + 1));
                     }
                 }
                 // Move up a cue
-                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::K)) {
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::K))
+                {
                     if *cue_ind > 0 {
                         new_edit_location = Some((*cue_ind - 1, *dca_ind));
                     }
                 }
                 // Move down a cue. If we are at the bottom, paste (implemented below).
-                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::J)) {
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::J))
+                {
                     new_edit_location = Some((*cue_ind + 1, *dca_ind));
                 }
             } else {
                 // If we are kbd editing...
                 // End kbd editing
-                if ui.ctx().input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape)) {
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape))
+                {
                     *is_kbd_editing = false;
                 }
                 // Assign/Unassign
@@ -762,7 +792,7 @@ impl State {
 }
 
 fn ch_number_assign_input_helper(ui: &mut egui::Ui) -> Option<u8> {
-    let n =  Modifiers::NONE;
+    let n = Modifiers::NONE;
     ui.ctx().input_mut(|i| {
         if i.consume_key(n, Key::Num1) {
             Some(1)
@@ -850,7 +880,7 @@ fn ch_number_assign_input_helper(ui: &mut egui::Ui) -> Option<u8> {
     })
 }
 fn ch_number_unassign_input_helper(ui: &mut egui::Ui) -> Option<u8> {
-    let s =  Modifiers::SHIFT;
+    let s = Modifiers::SHIFT;
     ui.ctx().input_mut(|i| {
         if i.consume_key(s, Key::Exclamationmark) {
             Some(1)

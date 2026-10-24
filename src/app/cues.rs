@@ -7,7 +7,12 @@ use super::*;
 impl super::State {
     /// Helper to begin editing a dca assignment.
     pub fn cues_begin_edit_dca_assign(&mut self, cue_ind: usize, dca_ind: usize) {
-        if let Some(dca) = self.cues().values().nth(cue_ind).map(|cue| &cue.dcas()[dca_ind]) {
+        if let Some(dca) = self
+            .cues()
+            .values()
+            .nth(cue_ind)
+            .map(|cue| &cue.dcas()[dca_ind])
+        {
             self.cues_begin_edit_action(ui::CuesUiMode::EditDcaAssign {
                 cue_ind: cue_ind,
                 dca_ind: dca_ind,

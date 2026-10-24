@@ -82,12 +82,16 @@ impl Pan {
 
         match input.classify() {
             FpCategory::Zero => input,
-            FpCategory::Normal | FpCategory::Subnormal | FpCategory::Infinite => input.clamp(-1.0, 1.0),
+            FpCategory::Normal | FpCategory::Subnormal | FpCategory::Infinite => {
+                input.clamp(-1.0, 1.0)
+            }
             FpCategory::Nan => 0.0,
         }
     }
     pub fn new(value: f32) -> Self {
-        Pan { value: Self::normalize(value) }
+        Pan {
+            value: Self::normalize(value),
+        }
     }
     pub fn value(&self) -> f32 {
         Self::normalize(self.value)
