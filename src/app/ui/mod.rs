@@ -103,6 +103,7 @@ pub enum CuesUiMode {
         dca_ind: usize,
         is_kbd_editing: bool,
         ui_pan_edit_buffer: String,
+        ui_level_edit_buffer: String,
         original_dca_state: super::cues::DcaState,
     },
     EditCueDesc {
@@ -496,6 +497,7 @@ impl State {
             dca_ind,
             is_kbd_editing,
             ui_pan_edit_buffer,
+            ui_level_edit_buffer,
             ..
         } = self.cues_ui_mode()
         {
@@ -505,6 +507,7 @@ impl State {
             let dca_ind = *dca_ind;
             let is_kbd_editing = *is_kbd_editing;
             let mut cloned_ui_pan_edit_buffer = ui_pan_edit_buffer.clone();
+            let mut cloned_ui_level_edit_buffer = ui_level_edit_buffer.clone();
             if let Some(mut copied_cue) = self.cues().values().nth(cue_ind).cloned() {
                 egui::Window::new("Edit DCA Assignments")
                     .title_bar(false)
@@ -571,6 +574,18 @@ impl State {
                                 }
                             }
                         });
+                        // DCA level edit
+                        ui.horizontal(|ui| {
+                            ui.label("Level:");
+                            if ui.text_edit_singleline(&mut cloned_ui_level_edit_buffer).lost_focus() {
+                                if let Ok(level_value) = f32::from_str(&cloned_ui_level_edit_buffer) {
+                                    *copied_cue.dcas_mut()[dca_ind].level_mut() = Some(level_value);
+                                } else if cloned_ui_level_edit_buffer.is_empty() {
+                                    *copied_cue.dcas_mut()[dca_ind].level_mut() = None;
+                                }
+                                cloned_ui_level_edit_buffer = copied_cue.dcas()[dca_ind].level_string();
+                            }
+                        });
                         // Pan edit
                         ui.horizontal(|ui| {
                             ui.label("Pan, range [-1.0, 1.0]:");
@@ -619,28 +634,83 @@ impl State {
                         }
                     });
 
-                // Do input (keyboard editing)
-                self.cues_ui_popup_dca_assign_input(ui, &mut copied_cue);
+                // Do keyboard editing
+                self.cues_ui_popup_dca_assign_input_kbd_edit(ui, &mut copied_cue);
 
+                // Assign back copied values
                 let Some(actual_cue) = self.cues_mut().values_mut().nth(cue_ind) else {
                     log::warn!("Unable to get cue at index {}", cue_ind);
                     return;
                 };
                 *actual_cue = copied_cue;
                 if let CuesUiMode::EditDcaAssign {
-                    ui_pan_edit_buffer, ..
+                    ui_pan_edit_buffer, ui_level_edit_buffer, ..
                 } = self.cues_ui_mode_mut()
                 {
                     *ui_pan_edit_buffer = cloned_ui_pan_edit_buffer;
+                    *ui_level_edit_buffer = cloned_ui_level_edit_buffer;
                 }
+
+                // Do other input
+                self.cues_ui_popup_dca_assign_input_move(ui);
             }
         }
     }
-    /// This handles the keyboard input for the dca assignment popup. It edits the assignment in the
-    /// provided cue. It gets input from the ui parameter, and it edits State to turn keyboard
-    /// editing on/off
-    fn cues_ui_popup_dca_assign_input(&mut self, ui: &mut egui::Ui, cue: &mut Cue) {
+    /// This handles the keyboard input for the dca assignment popup, specifically for keyboard
+    /// editing. It edits the assignment in the provided cue. It gets input from the ui parameter,
+    /// and it edits State to turn keyboard editing on/off
+    fn cues_ui_popup_dca_assign_input_kbd_edit(&mut self, ui: &mut egui::Ui, cue: &mut Cue) {
         let num_channels = self.num_channels();
+        // Guard against triggering while editing text
+        if ui.ctx().egui_wants_keyboard_input() {
+            return;
+        }
+        if let CuesUiMode::EditDcaAssign {
+            dca_ind,
+            is_kbd_editing,
+            ..
+        } = self.cues_ui_mode_mut()
+        {
+            if !*is_kbd_editing {
+                // If not kbd editing
+                // Begin kbd editing
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::E))
+                {
+                    *is_kbd_editing = true;
+                }
+            } else {
+                // If we are kbd editing...
+                // End kbd editing
+                if ui
+                    .ctx()
+                    .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape))
+                {
+                    *is_kbd_editing = false;
+                }
+                // Assign/Unassign
+                // The helpers are very long, they just check each possible key and return if one
+                // was pressed
+                if let Some(unassign_num) = ch_number_unassign_input_helper(ui)
+                    && unassign_num <= num_channels
+                    && let Some(ch) = Channel::from_number(unassign_num)
+                {
+                    cue.dcas_mut()[*dca_ind].unassign(ch);
+                } else if let Some(assign_num) = ch_number_assign_input_helper(ui)
+                    && assign_num <= num_channels
+                    && let Some(ch) = Channel::from_number(assign_num)
+                {
+                    cue.dcas_mut()[*dca_ind].assign(ch);
+                }
+            }
+        } else {
+            log::error!("Erroneous call to cues_ui_popup_dca_assign_input");
+        }
+    }
+    /// This handles the keyboard input for the dca assignment popup, specifically for moving
+    /// between cues and dcas with hjkl.
+    fn cues_ui_popup_dca_assign_input_move(&mut self, ui: &mut egui::Ui) {
         let num_dcas = self.num_dcas();
         // If we hjkl to a new cue/dca, which one? (cue_ind, dca_ind)
         let mut new_edit_location: Option<(usize, usize)> = None;
@@ -657,13 +727,6 @@ impl State {
         {
             if !*is_kbd_editing {
                 // If not kbd editing
-                // Begin kbd editing
-                if ui
-                    .ctx()
-                    .input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::E))
-                {
-                    *is_kbd_editing = true;
-                }
                 // Move to previous DCA
                 if ui
                     .ctx()
@@ -697,29 +760,6 @@ impl State {
                     .input_mut(|input| input.consume_key(Modifiers::SHIFT, Key::J))
                 {
                     new_edit_location = Some((*cue_ind + 1, *dca_ind));
-                }
-            } else {
-                // If we are kbd editing...
-                // End kbd editing
-                if ui
-                    .ctx()
-                    .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape))
-                {
-                    *is_kbd_editing = false;
-                }
-                // Assign/Unassign
-                // The helpers are very long, they just check each possible key and return if one
-                // was pressed
-                if let Some(unassign_num) = ch_number_unassign_input_helper(ui)
-                    && unassign_num <= num_channels
-                    && let Some(ch) = Channel::from_number(unassign_num)
-                {
-                    cue.dcas_mut()[*dca_ind].unassign(ch);
-                } else if let Some(assign_num) = ch_number_assign_input_helper(ui)
-                    && assign_num <= num_channels
-                    && let Some(ch) = Channel::from_number(assign_num)
-                {
-                    cue.dcas_mut()[*dca_ind].assign(ch);
                 }
             }
         } else {

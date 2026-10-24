@@ -18,6 +18,7 @@ impl super::State {
                 dca_ind: dca_ind,
                 is_kbd_editing: false,
                 ui_pan_edit_buffer: String::new(),
+                ui_level_edit_buffer: dca.level_string(),
                 original_dca_state: dca.clone(),
             });
         }
@@ -44,6 +45,7 @@ impl super::State {
                 dca_ind,
                 is_kbd_editing: _,
                 ui_pan_edit_buffer: _,
+                ui_level_edit_buffer: _,
                 ref original_dca_state,
             } => {
                 if let Some((_, cue)) = self.cues().iter().nth(cue_ind)
@@ -452,6 +454,16 @@ impl DcaState {
     }
     pub fn level(&self) -> &Option<Decibels> {
         &self.level
+    }
+    pub fn level_mut(&mut self) -> &mut Option<Decibels> {
+        &mut self.level
+    }
+    pub fn level_string(&self) -> String {
+        if let Some(level) = self.level {
+            level.to_string()
+        } else {
+            "".to_string()
+        }
     }
     pub fn pan(&self) -> &Pan {
         &self.pan
