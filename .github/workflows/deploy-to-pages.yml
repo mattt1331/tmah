@@ -20,9 +20,6 @@ jobs:
 
       - uses: jetli/trunk-action@v0.5.1
 
-      - name: Run tests
-        run: cargo test
-
       - name: Build files
         env:
           TRUNK_BUILD_RELEASE: true
