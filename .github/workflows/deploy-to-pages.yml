@@ -26,6 +26,7 @@ jobs:
       - name: Build files
         env:
           TRUNK_BUILD_RELEASE: true
+          TRUNK_BUILD_PUBLIC_URL: /tmah/
         run: trunk build
 
       - name: Upload built files
