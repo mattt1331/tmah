@@ -18,7 +18,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: jutli/trunk-action@v0.5.1
+      - uses: jetli/trunk-action@v0.5.1
 
       - name: Run tests
         run: cargo test
