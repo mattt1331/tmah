@@ -447,9 +447,6 @@ impl DcaState {
             name.to_string()
         }
     }
-    pub fn assigned_name(&self) -> &Option<String> {
-        &self.name
-    }
     pub fn edit_name(&mut self) -> &mut Option<String> {
         &mut self.name
     }
@@ -464,9 +461,6 @@ impl DcaState {
     }
     pub fn assigned(&self) -> &BTreeSet<Channel> {
         &self.assigned
-    }
-    pub fn set_assigned(&mut self, assignment: BTreeSet<Channel>) {
-        self.assigned = assignment;
     }
     /// Assigns the given channel to this DCA
     pub fn assign(&mut self, ch: Channel) {

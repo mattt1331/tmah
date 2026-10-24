@@ -88,6 +88,7 @@ impl Pan {
             FpCategory::Nan => 0.0,
         }
     }
+    #[allow(dead_code)]
     pub fn new(value: f32) -> Self {
         Pan {
             value: Self::normalize(value),

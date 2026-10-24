@@ -23,6 +23,7 @@ pub trait BoardEditAdaptor {
 #[derive(Debug)]
 pub enum SendError {
     /// This variant of `BoardEdit` is not supported by the implementation for this board.
+    #[allow(dead_code)]
     NotSupported,
 }
 
