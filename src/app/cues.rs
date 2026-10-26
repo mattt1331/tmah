@@ -343,8 +343,8 @@ impl CueNumber {
     /// Returns the number after this one, incrementing the lowest level of numbers that has been
     /// set
     pub fn increment_lowest(&mut self) {
-        if let Some((ref mut b, mut c)) = self.1 {
-            if let Some(ref mut c) = c {
+        if let Some((ref mut b, ref mut c)) = self.1 {
+            if let Some(c) = c {
                 *c += 1;
             } else {
                 *b += 1;
