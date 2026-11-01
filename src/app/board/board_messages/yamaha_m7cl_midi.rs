@@ -132,6 +132,18 @@ impl BoardEditAdaptor for YamahaM7CLMidi {
                         }
                     }
                 }
+                // kInputPan
+                0x0031 => {
+                    // kChannelPan
+                    if ind == 0x0001 {
+                        let ch = Channel::from_index(cc as u8);
+                        let pan_bytes: u8 = dd[4] | (dd[3] << 7);
+                        let pan_num = pan_bytes as i8;
+                        let pan_value: f32 = (pan_num as f32) / 63.0;
+                        let pan = Pan::new(pan_value);
+                        return Some(std::iter::once(BoardEdit::ChannelPan(ch, pan)));
+                    }
+                }
                 // Something else
                 _ => (),
             }
@@ -479,5 +491,14 @@ mod tests {
         assert_eq!(fader_value_to_index(-5.005).unwrap(), 723);
         assert_eq!(fader_value_to_index(-4.95).unwrap(), 724);
         assert_eq!(fader_value_to_index(-10.0).unwrap(), 623);
+    }
+    #[test]
+    fn parse_pan() {
+        let message = vec![0xF0, 0x43, 0x10, 0x3E, 0x11, 0x01, 0x00, 0x31, 0x00, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x05, 0xF7];
+        let mut conn = YamahaM7CLMidi::new();
+        let parsed = YamahaM7CLMidi::recv_board_message(&mut conn, message);
+        let target_ch = Channel::from_index(5);
+        let target_pan = Pan::new(5.0/63.0);
+        assert_eq!(parsed.unwrap().next(), Some(BoardEdit::ChannelPan(target_ch, target_pan)));
     }
 }
