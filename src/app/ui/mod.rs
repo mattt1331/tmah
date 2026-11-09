@@ -604,11 +604,8 @@ impl State {
                         let num_channels = self.num_channels();
                         let mut assigned: Vec<bool> = vec![false; num_channels.into()];
                         for ch in copied_cue.dcas()[dca_ind].assigned() {
-                            let ch_ind = ch.index() as usize;
-                            // In case the file contains channels that were assigned on a board with
-                            // more channels
-                            if ch_ind < assigned.len() {
-                                assigned[ch.index() as usize] = true;
+                            if let Some(ch_assigned) = assigned.get_mut(ch.index() as usize) {
+                                *ch_assigned = true;
                             }
                         }
                         let assigned_pre = assigned.clone();
