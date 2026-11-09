@@ -604,7 +604,9 @@ impl State {
                         let num_channels = self.num_channels();
                         let mut assigned: Vec<bool> = vec![false; num_channels.into()];
                         for ch in copied_cue.dcas()[dca_ind].assigned() {
-                            assigned[ch.index() as usize] = true;
+                            if let Some(ch_assigned) = assigned.get_mut(ch.index() as usize) {
+                                *ch_assigned = true;
+                            }
                         }
                         let assigned_pre = assigned.clone();
                         for i in 0..num_channels {
