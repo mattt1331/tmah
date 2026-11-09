@@ -169,8 +169,10 @@ fn send_ch_pan(ch_ind: u8, pan: Pan) -> Vec<MidiMessage> {
     let param: u16 = 0x2096 + ch_ind as u16;
     // The M7CL wants the pan as an integer in [-63, 63]. I assume this is meant to be represented
     // as an eight-bit two's complement integer (`i8`).
-    let value = ((63.0 * pan.value()) as i8).clamp(-63, 63) as u8;
-    let value = value as u16;
+    // This assumption is incorrect.
+    // The MSB of the NRPN is the value, where MSB 0 = L63, and MSB 125 = R62. MSB 63 = C.
+    let value = ((63.0 * pan.value()) as i8).clamp(-63, 63) + 64i8;
+    let value = (value as u16) << 7;
     send_nrpn(param, value)
 }
 /// Send the messages to assign/unassign the given channel from the given dca
